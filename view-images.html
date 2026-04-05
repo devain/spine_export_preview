@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Export folder — image gallery</title>
+  <style>
+    body { margin: 0; background: #1a1a1e; color: #ddd; font-family: system-ui, sans-serif; }
+    #wrap { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+    label { display: block; margin: 0.5rem 0 0.25rem; }
+    input[type="text"],
+    input[type="search"],
+    select {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      padding: 0.4rem 0.5rem;
+      background: #2a2a30;
+      color: #ddd;
+      border: 1px solid #444;
+      border-radius: 4px;
+    }
+    .field-label {
+      flex: 0 0 9.75rem;
+      margin: 0;
+      font-size: 0.9rem;
+      line-height: 1.25;
+      display: flex;
+      align-items: center;
+      align-self: center;
+      min-height: 2.25rem;
+    }
+    .field-grow {
+      flex: 1 1 0;
+      min-width: 0;
+      width: auto;
+      max-width: none;
+    }
+    input[type="search"].field-grow { min-width: 0; }
+    p.hint { font-size: 0.9rem; color: #888; }
+    code { background: #2a2a30; padding: 0.1rem 0.35rem; border-radius: 4px; }
+    #status { margin-top: 0.5rem; color: #f88; font-size: 0.9rem; min-height: 1.2em; }
+    .panel {
+      background: #222228;
+      border: 1px solid #3a3a44;
+      border-radius: 8px;
+      padding: 1rem 1.1rem;
+      margin-bottom: 1rem;
+    }
+    .panel h2 { margin: 0 0 0.75rem; font-size: 1.05rem; font-weight: 600; color: #eee; }
+    .row { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; margin-bottom: 0.65rem; }
+    .row:last-child { margin-bottom: 0; }
+    .panel .row { flex-wrap: nowrap; }
+    .panel .row:last-child { flex-wrap: wrap; }
+    .row label { margin: 0; font-size: 0.9rem; }
+    .row label.field-label { margin: 0; }
+    .row-scan .field-grow { flex: 1 1 0; }
+    .row-scan button.secondary { flex: 0 0 auto; align-self: center; }
+    button {
+      padding: 0.45rem 0.9rem;
+      background: #3d5a80;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    button:hover { background: #4a6fa5; }
+    button.primary { background: #2d6a4f; font-weight: 600; }
+    button.primary:hover { background: #40916c; }
+    button.secondary { background: #444; }
+    button.secondary:hover { background: #555; }
+    details.advanced { margin-top: 0.75rem; }
+    details.advanced summary { cursor: pointer; color: #9ab; font-size: 0.9rem; margin-bottom: 0.5rem; }
+    #gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+    }
+    #gallery figure {
+      margin: 0;
+      background: #111;
+      border-radius: 8px;
+      border: 1px solid #3a3a44;
+      overflow: hidden;
+    }
+    #gallery a { display: block; text-decoration: none; color: inherit; }
+    #gallery img {
+      width: 100%;
+      height: 200px;
+      object-fit: contain;
+      display: block;
+      background: #0a0a0c;
+      vertical-align: middle;
+    }
+    #gallery figcaption {
+      padding: 0.35rem 0.5rem;
+      font-size: 0.72rem;
+      color: #9ab;
+      word-break: break-all;
+      line-height: 1.25;
+    }
+    #gallery .img-err {
+      height: 200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #866;
+      font-size: 0.8rem;
+      padding: 0.5rem;
+      text-align: center;
+    }
+    .nav-top { margin-bottom: 0.75rem; font-size: 0.9rem; }
+    .nav-top a { color: #8ab4f8; }
+    #gallery-host { position: relative; }
+    #gallery-host:focus { outline: none; }
+    #gallery-host .gallery-scroll {
+      overflow-x: auto;
+    }
+    #gallery-scroll:focus {
+      outline: none;
+    }
+    #gallery-host .gallery-toolbar {
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.65rem;
+    }
+    #gallery-host .gallery-toolbar h2 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: #eee;
+    }
+    #gallery-host:fullscreen,
+    #gallery-host.fs-mobile-fallback {
+      width: 100vw;
+      width: 100dvw;
+      height: 100vh;
+      height: 100dvh;
+      max-width: none;
+      margin: 0;
+      border-radius: 0;
+      box-sizing: border-box;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      background: #0a0a0c;
+      border: none;
+      padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px)
+        env(safe-area-inset-left, 0px);
+    }
+    #gallery-host.fs-mobile-fallback {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 9999;
+    }
+    #gallery-host:fullscreen .gallery-scroll,
+    #gallery-host.fs-mobile-fallback .gallery-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+    }
+    #gallery-host:fullscreen #gallery,
+    #gallery-host.fs-mobile-fallback #gallery {
+      grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+      gap: 0.5rem;
+    }
+    #gallery-host:fullscreen #gallery img,
+    #gallery-host.fs-mobile-fallback #gallery img {
+      height: 140px;
+    }
+    #gallery-host:fullscreen #gallery .img-err,
+    #gallery-host.fs-mobile-fallback #gallery .img-err {
+      height: 140px;
+      font-size: 0.72rem;
+    }
+    /* Intrinsic pixel size; tiles left-to-right and wrap; scroll for wide rows */
+    #gallery.gallery-actual-size {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      align-content: flex-start;
+      gap: 1rem;
+    }
+    #gallery.gallery-actual-size figure {
+      width: max-content;
+      max-width: none;
+    }
+    #gallery.gallery-actual-size figure a {
+      display: block;
+    }
+    #gallery.gallery-actual-size img {
+      width: auto;
+      height: auto;
+      max-width: none;
+    }
+    #gallery.gallery-actual-size .img-err {
+      width: auto;
+      height: auto;
+      min-height: 4rem;
+    }
+    #gallery-host:fullscreen #gallery.gallery-actual-size,
+    #gallery-host.fs-mobile-fallback #gallery.gallery-actual-size {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      align-content: flex-start;
+    }
+    #gallery-host:fullscreen #gallery.gallery-actual-size img,
+    #gallery-host.fs-mobile-fallback #gallery.gallery-actual-size img {
+      height: auto;
+    }
+    #gallery-host:fullscreen #gallery.gallery-actual-size .img-err,
+    #gallery-host.fs-mobile-fallback #gallery.gallery-actual-size .img-err {
+      height: auto;
+    }
+    .gallery-toolbar label.gallery-opt {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin: 0;
+      font-size: 0.9rem;
+      color: #ccc;
+      cursor: pointer;
+      user-select: none;
+    }
+    .gallery-toolbar label.gallery-opt input {
+      width: auto;
+      margin: 0;
+    }
+    #gallery-host:fullscreen .gallery-body,
+    #gallery-host.fs-mobile-fallback .gallery-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .vi-edge-zone {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 14%;
+      z-index: 2;
+      display: none;
+      pointer-events: none;
+    }
+    #gallery-host.vi-show-touch-chrome .vi-edge-zone {
+      display: block;
+      pointer-events: auto;
+    }
+    #gallery-host.vi-mc-bar-open .vi-edge-zone {
+      display: none;
+      pointer-events: none;
+    }
+    .vi-edge-zone.vi-edge-top {
+      top: 0;
+    }
+    .vi-edge-zone.vi-edge-bottom {
+      bottom: 0;
+    }
+    .vi-mobile-controls {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 5;
+      max-height: 46%;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 0.35rem 0.5rem;
+      padding-bottom: max(0.45rem, env(safe-area-inset-bottom, 0px));
+      box-sizing: border-box;
+      background: linear-gradient(to top, rgba(12, 12, 16, 0.96) 70%, rgba(12, 12, 16, 0.65));
+      border-top: 1px solid #3a3a48;
+      touch-action: manipulation;
+    }
+    .vi-mobile-controls[hidden] {
+      display: none !important;
+    }
+    .vi-mc-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .vi-mc-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.3rem 0.45rem;
+    }
+    .vi-mc-label {
+      flex: 0 0 3.4rem;
+      font-size: 0.68rem;
+      color: #9ab;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .vi-mobile-controls button.vi-mc-btn {
+      padding: 0.38rem 0.65rem;
+      font-size: 0.8rem;
+      min-width: 2.35rem;
+    }
+    .vi-mobile-controls button.vi-mc-wide {
+      padding-left: 0.55rem;
+      padding-right: 0.55rem;
+      min-width: auto;
+      font-size: 0.75rem;
+    }
+    .vi-mc-actions {
+      margin-left: auto;
+      display: flex;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+    body.vi-fs-scroll-lock {
+      overflow: hidden;
+      position: fixed;
+      width: 100%;
+      left: 0;
+      right: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <p class="nav-top"><a href="index.html">← Spine viewer</a></p>
+    <h1>Image gallery</h1>
+    <p class="hint">
+      Serve this folder over HTTP (e.g. <code>serve-viewer.ps1</code>), then <strong>Scan folders</strong>, pick a directory, and <strong>Load images</strong>.
+      Lists <code>.png</code> <code>.jpg</code> <code>.jpeg</code> <code>.webp</code> <code>.gif</code> <code>.bmp</code> in that folder (not subfolders).
+      In <strong>full screen</strong> (gallery panel): <kbd>←</kbd><kbd>→</kbd> change folder and reload images (ignored in text fields); <kbd>↑</kbd><kbd>↓</kbd> scroll the gallery; <kbd>Space</kbd> toggles <strong>Actual size</strong> (ignored in text fields and on the Actual size checkbox). Esc exits full screen.
+      On <strong>touch</strong>, tap the <strong>top or bottom edge of the image area</strong> to open the same controls (auto-hides after a few seconds or <strong>Hide</strong>).
+      <strong>Actual size</strong> shows each image at its pixel dimensions in rows that wrap (scroll horizontally if a row is wider than the panel).
+    </p>
+
+    <div class="panel">
+      <h2>Choose folder</h2>
+      <div class="row row-scan">
+        <label for="scan-root" class="field-label">Scan under</label>
+        <input id="scan-root" class="field-grow" type="text" value="exportedcn" placeholder="exported" />
+        <button type="button" class="secondary" id="btn-scan" title="Uses the server directory listing">Scan folders</button>
+      </div>
+      <div class="row">
+        <label for="folder-search" class="field-label">Search folders</label>
+        <input
+          type="search"
+          id="folder-search"
+          class="field-grow"
+          placeholder="Filter folders by name…"
+          autocomplete="off"
+        />
+      </div>
+      <div class="row">
+        <label for="folder-select" class="field-label">Folder</label>
+        <select id="folder-select" class="field-grow">
+          <option value="">— Scan first, then pick a folder —</option>
+        </select>
+      </div>
+      <div class="row">
+        <button type="button" class="primary" id="btn-load">Load images</button>
+      </div>
+    </div>
+
+    <details class="advanced">
+      <summary>Advanced — folder path</summary>
+      <label for="folder-base">Folder URL path (relative to this page; trailing slash optional)</label>
+      <input id="folder-base" type="text" value="" placeholder="exportedcn/spine_bg_stage/" />
+    </details>
+
+    <div id="status"></div>
+
+    <div class="panel" id="gallery-host">
+      <div class="row gallery-toolbar">
+        <h2>Images</h2>
+        <label class="gallery-opt" title="Native width and height; tiles in a row and wrap when needed">
+          <input type="checkbox" id="chk-actual-size" />
+          Actual size
+        </label>
+        <button type="button" class="secondary" id="btn-fullscreen" title="Fills the screen with the gallery (Esc to exit)">
+          Full screen
+        </button>
+      </div>
+      <div class="gallery-body">
+        <div class="vi-edge-zone vi-edge-top" id="vi-edge-top" aria-hidden="true"></div>
+        <div class="gallery-scroll" id="gallery-scroll" tabindex="-1">
+          <p id="gallery-empty" class="hint" style="margin: 0">No images loaded yet.</p>
+          <div id="gallery" hidden></div>
+        </div>
+        <div class="vi-edge-zone vi-edge-bottom" id="vi-edge-bottom" aria-hidden="true"></div>
+      </div>
+      <div id="vi-mobile-controls" class="vi-mobile-controls" hidden>
+        <div class="vi-mc-inner">
+          <div class="vi-mc-row">
+            <span class="vi-mc-label">Folder</span>
+            <button type="button" class="secondary vi-mc-btn" data-vi-action="folder-prev" title="Previous folder (←)">‹</button>
+            <button type="button" class="secondary vi-mc-btn" data-vi-action="folder-next" title="Next folder (→)">›</button>
+            <span class="vi-mc-label">Scroll</span>
+            <button type="button" class="secondary vi-mc-btn" data-vi-action="scroll-up" title="Scroll up (↑)">↑</button>
+            <button type="button" class="secondary vi-mc-btn" data-vi-action="scroll-down" title="Scroll down (↓)">↓</button>
+            <span class="vi-mc-label">View</span>
+            <button type="button" class="secondary vi-mc-wide" data-vi-action="toggle-actual" title="Toggle actual size (Space)">Actual size</button>
+            <div class="vi-mc-actions">
+              <button type="button" class="secondary vi-mc-wide" id="vi-mc-btn-hide">Hide</button>
+              <button type="button" class="secondary vi-mc-wide" id="vi-mc-btn-exit">Exit full screen</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+(function () {
+  var folderList = [];
+  var viMobileControlsHideTimer = null;
+  var VI_MOBILE_CONTROLS_AUTO_HIDE_MS = 5000;
+  var viFallbackScrollY = 0;
+
+  function setStatus(msg, isError) {
+    var el = document.getElementById("status");
+    el.textContent = msg || "";
+    el.style.color = isError ? "#f88" : "#8c8";
+  }
+
+  function joinUrl(base, name) {
+    if (!base) return name;
+    return base.replace(/\/?$/, "/") + name.replace(/^\//, "");
+  }
+
+  function toFetchDirUrl(path) {
+    var s = path.replace(/\/?$/, "");
+    if (!s) return "./";
+    return (
+      s
+        .split("/")
+        .filter(function (x) {
+          return x.length > 0;
+        })
+        .map(function (seg) {
+          return encodeURIComponent(seg);
+        })
+        .join("/") + "/"
+    );
+  }
+
+  function parseDirectoryListing(html) {
+    var dirs = [];
+    var files = [];
+    var re = /href="([^"]+)"/gi;
+    var m;
+    while ((m = re.exec(html)) !== null) {
+      var h = m[1].split("#")[0];
+      if (!h || h === ".." || h.indexOf("javascript:") === 0) continue;
+      try {
+        h = decodeURIComponent(h);
+      } catch (e) {}
+      if (h.endsWith("/")) {
+        var name = h.replace(/\/+$/, "").split("/").pop();
+        if (name && name !== "..") dirs.push(name);
+      } else {
+        var leaf = h.split("/").pop();
+        if (leaf && leaf.indexOf("?") < 0) files.push(leaf);
+      }
+    }
+    return { dirs: dirs, files: files };
+  }
+
+  function sortNames(names) {
+    return names.slice().sort(function (a, b) {
+      return a.toLowerCase().localeCompare(b.toLowerCase());
+    });
+  }
+
+  function isImageFile(name) {
+    return /\.(png|jpg|jpeg|webp|gif|bmp)$/i.test(name);
+  }
+
+  function folderMatchesSearch(name, q) {
+    if (!q) return true;
+    return name.toLowerCase().indexOf(q) >= 0;
+  }
+
+  function rebuildFolderSelect() {
+    var searchEl = document.getElementById("folder-search");
+    var q = (searchEl && searchEl.value ? searchEl.value : "").trim().toLowerCase();
+    var sel = document.getElementById("folder-select");
+    var prev = sel.value;
+    sel.innerHTML = "";
+    var opt0 = document.createElement("option");
+    opt0.value = "";
+    opt0.textContent = "— Pick a folder —";
+    sel.appendChild(opt0);
+
+    var added = {};
+    if (prev && folderList.indexOf(prev) >= 0 && !folderMatchesSearch(prev, q)) {
+      var oKeep = document.createElement("option");
+      oKeep.value = prev;
+      oKeep.textContent = prev + " (current)";
+      sel.appendChild(oKeep);
+      added[prev] = true;
+    }
+
+    for (var i = 0; i < folderList.length; i++) {
+      var name = folderList[i];
+      if (added[name]) continue;
+      if (!folderMatchesSearch(name, q)) continue;
+      var o = document.createElement("option");
+      o.value = name;
+      o.textContent = name;
+      sel.appendChild(o);
+      added[name] = true;
+    }
+
+    for (var j = 0; j < sel.options.length; j++) {
+      if (sel.options[j].value === prev) {
+        sel.selectedIndex = j;
+        return;
+      }
+    }
+  }
+
+  function applyFolderToBase(folderName) {
+    var scanRoot = (document.getElementById("scan-root").value.trim() || "exportedcn").replace(/\/?$/, "");
+    document.getElementById("folder-base").value = scanRoot + "/" + folderName + "/";
+  }
+
+  function scanFolders() {
+    var scanRoot = (document.getElementById("scan-root").value.trim() || "exportedcn").replace(/\/?$/, "");
+    var url = toFetchDirUrl(scanRoot + "/");
+    setStatus("Scanning " + scanRoot + "/ …", false);
+    return fetch(url)
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.status + " " + r.statusText);
+        return r.text();
+      })
+      .then(function (html) {
+        var list = parseDirectoryListing(html);
+        var dirs = list.dirs.filter(function (d, i, a) {
+          return a.indexOf(d) === i;
+        });
+        dirs.sort(function (a, b) {
+          return a.toLowerCase().localeCompare(b.toLowerCase());
+        });
+        folderList = dirs;
+        rebuildFolderSelect();
+        var q = (document.getElementById("folder-search").value || "").trim();
+        var extra = q ? " · filter active" : "";
+        setStatus("Found " + dirs.length + " folder(s) under " + scanRoot + "/" + extra, false);
+      })
+      .catch(function (e) {
+        setStatus(
+          "Scan failed (" +
+            e.message +
+            "). Serve this folder over HTTP; file:// cannot list directories.",
+          true
+        );
+      });
+  }
+
+  function getFullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+  }
+
+  function isGalleryFullscreen() {
+    var host = document.getElementById("gallery-host");
+    return !!(
+      host &&
+      (getFullscreenElement() === host || host.classList.contains("fs-mobile-fallback"))
+    );
+  }
+
+  function updateFullscreenButtonLabel() {
+    var btn = document.getElementById("btn-fullscreen");
+    if (!btn) return;
+    btn.textContent = isGalleryFullscreen() ? "Exit full screen" : "Full screen";
+  }
+
+  function preferFsTouchControls() {
+    if (typeof navigator !== "undefined" && (navigator.maxTouchPoints || 0) > 0) return true;
+    try {
+      return window.matchMedia("(pointer: coarse)").matches;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function hideViMobileControls() {
+    var bar = document.getElementById("vi-mobile-controls");
+    var host = document.getElementById("gallery-host");
+    if (viMobileControlsHideTimer) {
+      clearTimeout(viMobileControlsHideTimer);
+      viMobileControlsHideTimer = null;
+    }
+    if (bar) bar.hidden = true;
+    if (host) host.classList.remove("vi-mc-bar-open");
+  }
+
+  function scheduleViMobileControlsHide() {
+    if (viMobileControlsHideTimer) clearTimeout(viMobileControlsHideTimer);
+    viMobileControlsHideTimer = setTimeout(function () {
+      viMobileControlsHideTimer = null;
+      hideViMobileControls();
+    }, VI_MOBILE_CONTROLS_AUTO_HIDE_MS);
+  }
+
+  function showViMobileControls() {
+    if (!isGalleryFullscreen() || !preferFsTouchControls()) return;
+    var bar = document.getElementById("vi-mobile-controls");
+    var host = document.getElementById("gallery-host");
+    if (!bar || !host) return;
+    bar.hidden = false;
+    host.classList.add("vi-mc-bar-open");
+    scheduleViMobileControlsHide();
+  }
+
+  function syncViTouchChrome() {
+    var host = document.getElementById("gallery-host");
+    if (!host) return;
+    var on = isGalleryFullscreen() && preferFsTouchControls();
+    host.classList.toggle("vi-show-touch-chrome", on);
+    if (!on) hideViMobileControls();
+  }
+
+  function exitViMobileFallback() {
+    var host = document.getElementById("gallery-host");
+    if (!host) return;
+    host.classList.remove("fs-mobile-fallback");
+    document.body.classList.remove("vi-fs-scroll-lock");
+    document.body.style.top = "";
+    window.scrollTo(0, viFallbackScrollY);
+    hideViMobileControls();
+  }
+
+  function enterViMobileFallback() {
+    var host = document.getElementById("gallery-host");
+    if (!host || host.classList.contains("fs-mobile-fallback")) return;
+    viFallbackScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.body.classList.add("vi-fs-scroll-lock");
+    document.body.style.top = -viFallbackScrollY + "px";
+    host.classList.add("fs-mobile-fallback");
+    onFullscreenChanged();
+  }
+
+  function exitGalleryFullscreen() {
+    var host = document.getElementById("gallery-host");
+    if (host && host.classList.contains("fs-mobile-fallback")) {
+      exitViMobileFallback();
+      onFullscreenChanged();
+      return;
+    }
+    var ex = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+    if (ex) {
+      try {
+        ex.call(document);
+      } catch (err) {}
+    }
+  }
+
+  function viScrollGallery(direction) {
+    var el = document.getElementById("gallery-scroll");
+    if (!el) return;
+    var step = Math.max(100, Math.floor(el.clientHeight * 0.35));
+    el.scrollTop += direction * step;
+  }
+
+  function toggleViActualSize() {
+    var chk = document.getElementById("chk-actual-size");
+    if (!chk) return;
+    chk.checked = !chk.checked;
+    chk.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function viMcApplyAction(action) {
+    switch (action) {
+      case "folder-prev":
+        cycleFolderAndLoad(-1);
+        break;
+      case "folder-next":
+        cycleFolderAndLoad(1);
+        break;
+      case "scroll-up":
+        viScrollGallery(-1);
+        break;
+      case "scroll-down":
+        viScrollGallery(1);
+        break;
+      case "toggle-actual":
+        toggleViActualSize();
+        break;
+      default:
+        break;
+    }
+  }
+
+  /** Cycle a select to another option with a non-empty value; delta is ±1. Returns new value or null. */
+  function cycleSelectWithValues(sel, delta) {
+    if (!sel || sel.disabled) return null;
+    var indices = [];
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value) indices.push(i);
+    }
+    if (indices.length < 2) return null;
+    var cur = sel.selectedIndex;
+    var pos = -1;
+    for (var j = 0; j < indices.length; j++) {
+      if (indices[j] === cur) {
+        pos = j;
+        break;
+      }
+    }
+    if (pos < 0) pos = 0;
+    var len = indices.length;
+    var newPos = (pos + delta) % len;
+    if (newPos < 0) newPos += len;
+    sel.selectedIndex = indices[newPos];
+    return sel.value;
+  }
+
+  /** Only real text fields: do not treat BUTTON/SELECT as typing (focus often stays on Full screen after click). */
+  function isArrowFolderTypingTarget(el) {
+    if (!el || !el.tagName) return false;
+    var tag = el.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA") return true;
+    if (el.isContentEditable) return true;
+    return false;
+  }
+
+  /** Full screen only: change folder and reload gallery. */
+  function cycleFolderAndLoad(delta) {
+    var sel = document.getElementById("folder-select");
+    var v = cycleSelectWithValues(sel, delta);
+    if (v == null || !v) return false;
+    applyFolderToBase(v);
+    loadImages();
+    return true;
+  }
+
+  function loadImages() {
+    var base = document.getElementById("folder-base").value.trim().replace(/\/?$/, "");
+    if (!base) {
+      setStatus("Pick a folder from the list or enter a path under Advanced.", true);
+      return;
+    }
+    var listUrl = toFetchDirUrl(base + "/");
+    setStatus("Loading listing for " + base + "/ …", false);
+    fetch(listUrl)
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.status + " " + r.statusText);
+        return r.text();
+      })
+      .then(function (html) {
+        var list = parseDirectoryListing(html);
+        var images = sortNames(list.files.filter(isImageFile));
+        var gallery = document.getElementById("gallery");
+        var emptyEl = document.getElementById("gallery-empty");
+        gallery.innerHTML = "";
+        if (images.length === 0) {
+          gallery.hidden = true;
+          emptyEl.hidden = false;
+          emptyEl.textContent = "No image files in this folder (.png .jpg .jpeg .webp .gif .bmp).";
+          setStatus("0 images in " + base + "/", false);
+          return;
+        }
+        emptyEl.hidden = true;
+        gallery.hidden = false;
+        var prefix = base + "/";
+        for (var i = 0; i < images.length; i++) {
+          var fname = images[i];
+          var src = joinUrl(prefix, fname);
+          var fig = document.createElement("figure");
+          var a = document.createElement("a");
+          a.href = src;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          a.title = "Open " + fname;
+          var img = document.createElement("img");
+          img.alt = fname;
+          img.loading = "lazy";
+          img.decoding = "async";
+          img.src = src;
+          img.onerror = function (figEl, name) {
+            return function () {
+              figEl.innerHTML = "";
+              var err = document.createElement("div");
+              err.className = "img-err";
+              err.textContent = "Failed to load\n" + name;
+              figEl.appendChild(err);
+              var cap = document.createElement("figcaption");
+              cap.textContent = name;
+              figEl.appendChild(cap);
+            };
+          }(fig, fname);
+          a.appendChild(img);
+          fig.appendChild(a);
+          var cap = document.createElement("figcaption");
+          cap.textContent = fname;
+          fig.appendChild(cap);
+          gallery.appendChild(fig);
+        }
+        setStatus(images.length + " image(s) from " + base + "/", false);
+      })
+      .catch(function (e) {
+        setStatus("Load failed: " + e.message, true);
+      });
+  }
+
+  document.getElementById("btn-scan").addEventListener("click", scanFolders);
+  document.getElementById("folder-search").addEventListener("input", function () {
+    if (!folderList.length) return;
+    rebuildFolderSelect();
+  });
+  document.getElementById("folder-search").addEventListener("search", function () {
+    if (!folderList.length) return;
+    rebuildFolderSelect();
+  });
+  document.getElementById("folder-select").addEventListener("change", function () {
+    if (!this.value) return;
+    applyFolderToBase(this.value);
+  });
+  document.getElementById("btn-load").addEventListener("click", loadImages);
+
+  document.getElementById("chk-actual-size").addEventListener("change", function () {
+    var g = document.getElementById("gallery");
+    if (this.checked) g.classList.add("gallery-actual-size");
+    else g.classList.remove("gallery-actual-size");
+  });
+
+  document.getElementById("btn-fullscreen").addEventListener("click", function () {
+    var host = document.getElementById("gallery-host");
+    if (isGalleryFullscreen()) {
+      exitGalleryFullscreen();
+      return;
+    }
+    var req = host.requestFullscreen || host.webkitRequestFullscreen || host.msRequestFullscreen;
+    if (req) {
+      req.call(host).catch(function () {
+        enterViMobileFallback();
+      });
+    } else {
+      enterViMobileFallback();
+    }
+  });
+
+  function onFullscreenChanged() {
+    updateFullscreenButtonLabel();
+    var host = document.getElementById("gallery-host");
+    var scrollEl = document.getElementById("gallery-scroll");
+    if (isGalleryFullscreen() && scrollEl) {
+      scrollEl.focus();
+    }
+    syncViTouchChrome();
+  }
+  document.addEventListener("fullscreenchange", onFullscreenChanged);
+  document.addEventListener("webkitfullscreenchange", onFullscreenChanged);
+
+  document.addEventListener(
+    "keydown",
+    function (ev) {
+      if (!isGalleryFullscreen()) return;
+      if (isArrowFolderTypingTarget(ev.target)) return;
+      if (ev.key === "ArrowLeft" || ev.key === "ArrowRight") {
+        if (!cycleFolderAndLoad(ev.key === "ArrowLeft" ? -1 : 1)) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        return;
+      }
+      if (ev.key === "ArrowUp" || ev.key === "ArrowDown") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        viScrollGallery(ev.key === "ArrowUp" ? -1 : 1);
+        return;
+      }
+      if (ev.key === " " || ev.code === "Space") {
+        var t = ev.target;
+        if (t && t.id === "chk-actual-size") return;
+        toggleViActualSize();
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+    },
+    true
+  );
+
+  (function setupViMobileControls() {
+    function onViEdgePointerDown(ev) {
+      if (!isGalleryFullscreen() || !preferFsTouchControls()) return;
+      showViMobileControls();
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+
+    var viTop = document.getElementById("vi-edge-top");
+    var viBot = document.getElementById("vi-edge-bottom");
+    if (viTop) viTop.addEventListener("pointerdown", onViEdgePointerDown, true);
+    if (viBot) viBot.addEventListener("pointerdown", onViEdgePointerDown, true);
+
+    var viBar = document.getElementById("vi-mobile-controls");
+    if (viBar) {
+      viBar.addEventListener("click", function (ev) {
+        var btn = ev.target.closest("[data-vi-action]");
+        if (btn) {
+          viMcApplyAction(btn.getAttribute("data-vi-action"));
+          scheduleViMobileControlsHide();
+        }
+      });
+      viBar.addEventListener("pointerdown", function () {
+        scheduleViMobileControlsHide();
+      });
+    }
+
+    var viHideBtn = document.getElementById("vi-mc-btn-hide");
+    if (viHideBtn) {
+      viHideBtn.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        hideViMobileControls();
+      });
+    }
+
+    var viExitBtn = document.getElementById("vi-mc-btn-exit");
+    if (viExitBtn) {
+      viExitBtn.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        hideViMobileControls();
+        exitGalleryFullscreen();
+      });
+    }
+  })();
+})();
+  </script>
+</body>
+</html>
