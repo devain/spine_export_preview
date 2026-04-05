@@ -1,1 +1,2571 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Spine export preview</title>
+  <style>
+    body { margin: 0; background: #1a1a1e; color: #ddd; font-family: system-ui, sans-serif; }
+    #wrap { max-width: 960px; margin: 0 auto; padding: 1rem; }
+    #player-container { min-height: 480px; background: #111; border-radius: 8px; position: relative; }
+    #player-container canvas { display: block; width: 100%; height: 480px; }
+    label { display: block; margin: 0.5rem 0 0.25rem; }
+    input[type="text"],
+    input[type="search"],
+    select {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      padding: 0.4rem 0.5rem;
+      background: #2a2a30;
+      color: #ddd;
+      border: 1px solid #444;
+      border-radius: 4px;
+    }
+    /* Form rows: fixed label column + control fills space (avoids label+input both flex-growing). */
+    .field-label {
+      flex: 0 0 9.75rem;
+      margin: 0;
+      font-size: 0.9rem;
+      line-height: 1.25;
+      display: flex;
+      align-items: center;
+      align-self: center;
+      min-height: 2.25rem;
+    }
+    /* flex-basis 0 + min-width 0 avoids search/input intrinsic min-width forcing a row wrap. */
+    .field-grow {
+      flex: 1 1 0;
+      min-width: 0;
+      width: auto;
+      max-width: none;
+    }
+    input[type="search"].field-grow {
+      min-width: 0;
+    }
+    p.hint { font-size: 0.9rem; color: #888; }
+    .nav-top { margin-bottom: 0.75rem; font-size: 0.9rem; }
+    .nav-top a { color: #8ab4f8; }
+    code { background: #2a2a30; padding: 0.1rem 0.35rem; border-radius: 4px; }
+    #status { margin-top: 0.5rem; color: #f88; font-size: 0.9rem; min-height: 1.2em; }
+    .panel {
+      background: #222228;
+      border: 1px solid #3a3a44;
+      border-radius: 8px;
+      padding: 1rem 1.1rem;
+      margin-bottom: 1rem;
+    }
+    .panel h2 { margin: 0 0 0.75rem; font-size: 1.05rem; font-weight: 600; color: #eee; }
+    .row { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; margin-bottom: 0.65rem; }
+    .row:last-child { margin-bottom: 0; }
+    /* Keep label + control on one line (search inputs have a large default min-width). */
+    .panel:not(.view-toolbar) .row {
+      flex-wrap: nowrap;
+    }
+    .panel:not(.view-toolbar) .row:last-child {
+      flex-wrap: wrap;
+    }
+    .row label { margin: 0; font-size: 0.9rem; }
+    .row label.field-label { margin: 0; }
+    .grow { flex: 1; min-width: 180px; }
+    .row-scan button.secondary {
+      flex: 0 0 auto;
+      align-self: center;
+    }
+    button {
+      padding: 0.45rem 0.9rem;
+      background: #3d5a80;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    button:hover { background: #4a6fa5; }
+    button.primary { background: #2d6a4f; font-weight: 600; }
+    button.primary:hover { background: #40916c; }
+    button.secondary { background: #444; }
+    button.secondary:hover { background: #555; }
+    details.advanced { margin-top: 0.75rem; }
+    details.advanced summary { cursor: pointer; color: #9ab; font-size: 0.9rem; margin-bottom: 0.5rem; }
+    #player-container:fullscreen,
+    #player-container.fs-mobile-fallback {
+      width: 100vw;
+      width: 100dvw;
+      height: 100vh;
+      height: 100dvh;
+      max-width: none;
+      border-radius: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0a0a0c;
+      min-height: 0;
+      cursor: grab;
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+      padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px)
+        env(safe-area-inset-left, 0px);
+      box-sizing: border-box;
+    }
+    #player-container.fs-mobile-fallback {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 9999;
+    }
+    #player-container:fullscreen canvas,
+    #player-container.fs-mobile-fallback canvas {
+      width: 100%;
+      height: 100%;
+      max-width: 100vw;
+      max-height: 100vh;
+      touch-action: none;
+    }
+    body.fs-mobile-scroll-lock {
+      overflow: hidden;
+      position: fixed;
+      width: 100%;
+      left: 0;
+      right: 0;
+    }
+    /* Touch / coarse pointer: tap top or bottom edge in fullscreen to show control bar */
+    .fs-edge-zone {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 14%;
+      z-index: 2;
+      display: none;
+      pointer-events: none;
+    }
+    #player-container.fs-show-touch-chrome .fs-edge-zone {
+      display: block;
+      pointer-events: auto;
+    }
+    #player-container.fs-mc-bar-open .fs-edge-zone {
+      display: none;
+      pointer-events: none;
+    }
+    .fs-edge-zone.fs-edge-top {
+      top: 0;
+    }
+    .fs-edge-zone.fs-edge-bottom {
+      bottom: 0;
+    }
+    .fs-mobile-controls {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 5;
+      max-height: 48%;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 0.35rem 0.5rem;
+      padding-bottom: max(0.45rem, env(safe-area-inset-bottom, 0px));
+      box-sizing: border-box;
+      background: linear-gradient(to top, rgba(12, 12, 16, 0.96) 70%, rgba(12, 12, 16, 0.65));
+      border-top: 1px solid #3a3a48;
+      touch-action: manipulation;
+    }
+    .fs-mobile-controls[hidden] {
+      display: none !important;
+    }
+    .fs-mc-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .fs-mc-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.3rem 0.45rem;
+    }
+    .fs-mc-label {
+      flex: 0 0 3.2rem;
+      font-size: 0.68rem;
+      color: #9ab;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .fs-mobile-controls button.fs-mc-btn {
+      padding: 0.38rem 0.65rem;
+      font-size: 0.8rem;
+      min-width: 2.35rem;
+    }
+    .fs-mobile-controls button.fs-mc-wide {
+      padding-left: 0.55rem;
+      padding-right: 0.55rem;
+      min-width: auto;
+      font-size: 0.75rem;
+    }
+    .fs-mc-actions {
+      margin-left: auto;
+      display: flex;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+    input[type="range"] {
+      flex: 1;
+      min-width: 120px;
+      max-width: 220px;
+      accent-color: #4a6fa5;
+    }
+    .view-toolbar .zoom-readout {
+      min-width: 3.2rem;
+      font-size: 0.85rem;
+      color: #9ab;
+    }
+    kbd {
+      display: inline-block;
+      padding: 0.1rem 0.35rem;
+      font-size: 0.75rem;
+      font-family: ui-monospace, monospace;
+      background: #2a2a30;
+      border: 1px solid #555;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <p class="nav-top"><a href="view-images.html">Image gallery</a></p>
+    <h1>Spine export preview</h1>
+    <p class="hint">
+      Serve this folder over HTTP (<code>serve-viewer.ps1</code>), open this page, then <strong>Scan</strong> and pick an export folder.
+      If <code>spine-folders.txt</code> is present (from <code>list-spine-folders.ps1</code>), the <strong>Exported spine</strong> list loads from that file instead of scanning every subfolder.
+      Game data is <strong>Spine 3.3.x</strong> binary (legacy reader). Use <strong>Skin</strong> for one character at a time, or <strong>All skins merged</strong> for static duo (animations own attachment keys; add <code>?setup=1</code> for a frozen duo pose). <code>?skin=Name</code> preselects a skin after load.
+      Put full-screen backdrops in <code>exported/spine_bg_*</code> (images only — no <code>.atlas</code>); after <strong>Scan</strong>, pick one under <strong>Background</strong>.
+      Clipping on by default; blank canvas: <code>?noclip=1</code>. URL: <code>?pma=0</code>, <code>?anim=Name</code>.
+      <strong>Mobile / touch:</strong> in full screen, drag one finger to pan; pinch two fingers to zoom. Browsers without full-screen API use a fixed canvas (same button to exit).
+    </p>
+
+    <div class="panel">
+      <h2>Choose spine</h2>
+      <div class="row row-scan">
+        <label for="scan-root" class="field-label">Scan under</label>
+        <input id="scan-root" class="field-grow" type="text" value="exportedcn" placeholder="exported" />
+        <button type="button" class="secondary" id="btn-scan" title="Uses the server directory listing">Scan folders</button>
+      </div>
+      <div class="row">
+        <label for="bundle-search" class="field-label">Search folders</label>
+        <input
+          type="search"
+          id="bundle-search"
+          class="field-grow"
+          placeholder="Filter export folders by name…"
+          autocomplete="off"
+        />
+      </div>
+      <div class="row">
+        <label for="bundle-select" class="field-label">Exported spine</label>
+        <select id="bundle-select" class="field-grow">
+          <option value="">— Scan first, then pick a folder —</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="atlas-select" class="field-label">Atlas file</label>
+        <select id="atlas-select" class="field-grow" disabled>
+          <option value="">Pick an export folder first…</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="skel-select" class="field-label">Skeleton file</label>
+        <select id="skel-select" class="field-grow" disabled>
+          <option value="">Pick an export folder first…</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="anim-select" class="field-label">Animation</label>
+        <select id="anim-select" class="field-grow" disabled>
+          <option value="">Loads after you open a skeleton…</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="skin-select" class="field-label">Skin</label>
+        <select id="skin-select" class="field-grow" disabled title="One skin = one character when they overlap; merged = everyone">
+          <option value="">— Load skeleton first —</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="bg-image" class="field-label">Background</label>
+        <select id="bg-image" class="field-grow" disabled title="Plain images from spine_bg_* folders (no .atlas)">
+          <option value="">— Scan folders first —</option>
+        </select>
+      </div>
+      <div class="row">
+        <button type="button" class="primary" id="load">Load spine</button>
+        <label><input type="checkbox" id="opt-pma" /> Premultiplied alpha</label>
+        <label><input type="checkbox" id="debug-bones" /> Debug bones / regions</label>
+      </div>
+    </div>
+
+    <details class="advanced">
+      <summary>Advanced — manual paths</summary>
+      <label for="base">Folder prefix (relative to this page)</label>
+      <input id="base" type="text" value="exportedcn/spine_char_lana_abs/" />
+      <label for="atlas">Atlas file name (synced with Atlas file above)</label>
+      <input id="atlas" type="text" value="Lana.atlas" />
+      <label for="skel">Skeleton file (synced with Skeleton file above)</label>
+      <input id="skel" type="text" value="Lana.skel" />
+    </details>
+    <div id="status"></div>
+
+    <div class="panel view-toolbar">
+      <h2>Canvas view</h2>
+      <div class="row">
+        <button type="button" class="secondary" id="btn-fullscreen" title="Fills the screen with the player (Esc to exit)">
+          Full screen
+        </button>
+        <label for="view-zoom" class="grow">Zoom</label>
+        <input type="range" id="view-zoom" min="25" max="400" value="100" step="5" title="Larger = closer (more detail on screen)" />
+        <span class="zoom-readout" id="view-zoom-readout">100%</span>
+        <label for="view-quality">Render quality</label>
+        <select id="view-quality" title="Higher = sharper (more GPU pixels); uses device pixel ratio × this value">
+          <option value="1">1× (standard)</option>
+          <option value="1.25">1.25×</option>
+          <option value="1.5">1.5×</option>
+          <option value="2">2× (sharp)</option>
+          <option value="3">3× (heavy)</option>
+        </select>
+      </div>
+      <p class="hint" style="margin: 0.35rem 0 0; font-size: 0.82rem">
+        While <strong>full screen</strong>: <strong>wheel</strong> / <kbd>+</kbd><kbd>-</kbd> zoom (Ctrl ×2) ·
+        <strong>drag</strong> pan · <kbd>W</kbd><kbd>S</kbd> exported spine folder (reloads) ·
+        <kbd>A</kbd><kbd>D</kbd> background · <kbd>↑</kbd><kbd>↓</kbd> atlas · <kbd>←</kbd><kbd>→</kbd> animation. Ignored in text fields.
+        On <strong>touch</strong>, tap the <strong>top or bottom edge</strong> of the canvas to show the same actions (auto-hides after a few seconds or use <strong>Hide</strong>).
+      </p>
+    </div>
+
+    <div id="player-container">
+      <canvas id="spine-canvas" width="800" height="480"></canvas>
+      <div class="fs-edge-zone fs-edge-top" id="fs-edge-top" aria-hidden="true"></div>
+      <div class="fs-edge-zone fs-edge-bottom" id="fs-edge-bottom" aria-hidden="true"></div>
+      <div id="fs-mobile-controls" class="fs-mobile-controls" hidden>
+        <div class="fs-mc-inner">
+          <div class="fs-mc-row">
+            <span class="fs-mc-label">Spine</span>
+            <button type="button" class="secondary fs-mc-btn" data-fs-action="spine-prev" title="Previous folder (W)">‹</button>
+            <button type="button" class="secondary fs-mc-btn" data-fs-action="spine-next" title="Next folder (S)">›</button>
+            <span class="fs-mc-label">BG</span>
+            <button type="button" class="secondary fs-mc-btn" data-fs-action="bg-prev" title="Previous background (A)">‹</button>
+            <button type="button" class="secondary fs-mc-btn" data-fs-action="bg-next" title="Next background (D)">›</button>
+          </div>
+          <div class="fs-mc-row">
+            <span class="fs-mc-label">Atlas</span>
+            <button type="button" class="secondary fs-mc-btn" data-fs-action="atlas-prev" title="Previous atlas (↑)">↑</button>
+            <button type="button" class="secondary fs-mc-btn" data-fs-action="atlas-next" title="Next atlas (↓)">↓</button>
+            <span class="fs-mc-label">Anim</span>
+            <button type="button" class="secondary fs-mc-btn" data-fs-action="anim-prev" title="Previous animation (←)">‹</button>
+            <button type="button" class="secondary fs-mc-btn" data-fs-action="anim-next" title="Next animation (→)">›</button>
+            <span class="fs-mc-label">Zoom</span>
+            <button type="button" class="secondary fs-mc-btn" data-fs-action="zoom-out" title="Zoom out (−)">−</button>
+            <button type="button" class="secondary fs-mc-btn" data-fs-action="zoom-in" title="Zoom in (+)">+</button>
+            <div class="fs-mc-actions">
+              <button type="button" class="secondary fs-mc-wide" id="fs-mc-btn-hide">Hide</button>
+              <button type="button" class="secondary fs-mc-wide" id="fs-mc-btn-exit">Exit full screen</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Spine 3.8: WebGL + types; legacy &lt;3.8 .skel layout handled in spine-binary-legacy.js -->
+  <!--<script src="https://cdn.jsdelivr.net/gh/EsotericSoftware/spine-runtimes@3.8/spine-ts/build/spine-webgl.js"></script> -->
+  <script src="spine-webgl.js"></script>
+  <script src="spine-binary-legacy.js"></script>
+  <script src="spine-atlas-flex.js"></script>
+  <script>
+(function () {
+  var urlParams = new URLSearchParams(typeof location !== "undefined" ? location.search : "");
+  /** Single skin by name; if absent, all skins are merged for display (see buildCombinedDisplaySkin). */
+  var skinQuery = (urlParams.get("skin") || "").trim();
+  /** Optional default animation after load (same as old text field). */
+  var animQuery = (urlParams.get("anim") || "").trim();
+  /** If true, never run AnimationState (isolates “animation zeroed slot alpha” vs parse/MVP issues). */
+  var forceSetupPoseOnly = urlParams.has("setup");
+  /**
+   * Real clipping masks glow/VFX meshes to a polygon. Stub clipper (?noclip=1) draws them as huge solid
+   * rectangles (additive layers look like cyan/red blocks on black).
+   */
+  var disableClipping = urlParams.has("noclip");
+  var rafId = 0;
+  var lastFrameTime = 0;
+  var gl, canvas, shader, batcher, mvp, skeletonRenderer, assetManager;
+  var debugShader, shapeRenderer, skeletonDebugRenderer;
+  /**
+   * Default true: Unity/game PNGs are usually PMA; straight-alpha + PMA=false keeps rgb≈0 → invisible.
+   * Force straight-alpha blending: open with ?pma=0
+   */
+  var skeleton, animationState, bounds, premultipliedAlpha = urlParams.has("pma")
+    ? urlParams.get("pma") !== "0"
+    : false;
+  var diagLine = "";
+  var frameIdx = 0;
+  /** True when 3.3 .skel yields no timelines under the 3.8 reader (still draw setup pose). */
+  var setupPoseOnly = false;
+  /** Folder names from last successful scan (used to filter the spine dropdown). */
+  var bundleFolderList = [];
+  /** Fullscreen pan offset in skeleton world space (applied in resize ortho center). */
+  var viewPanX = 0;
+  var viewPanY = 0;
+  /** One-finger pan: last pointer position in CSS pixels. */
+  var viewPanDrag = null;
+  /** Active pointers on the player (id → position) for touch / pointer pan and pinch. */
+  var viewTouchPointers = new Map();
+  /** { mode: "pan", pointerId } | { mode: "pinch", startDist, startZoom } */
+  var viewPointerState = null;
+  var fsFallbackScrollY = 0;
+  var fsMobileControlsHideTimer = null;
+  var FS_MOBILE_CONTROLS_AUTO_HIDE_MS = 5000;
+  /** Last ortho world width/height (for pixel → world drag delta). Updated in resize(). */
+  var lastOrthoWorldW = 1;
+  var lastOrthoWorldH = 1;
+  /** View center in skeleton world space (same as ortho center). */
+  var lastViewCenterX = 0;
+  var lastViewCenterY = 0;
+  /** Optional full-screen backdrop from spine_bg_* / PNG (WebGL texture). */
+  var bgTexture = null;
+  var bgProgram = null;
+  var bgVbo = null;
+  var bgAttribPos = -1;
+  var bgAttribUv = -1;
+  var bgUniformMvp = null;
+  var bgUniformTex = null;
+  var bgImageEl = null;
+  var bgImageUrl = "";
+
+  function setStatus(msg, isError) {
+    var el = document.getElementById("status");
+    el.textContent = msg || "";
+    el.style.color = isError ? "#f88" : "#8c8";
+  }
+
+  function stopLoop() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = 0;
+  }
+
+  function joinUrl(base, name) {
+    if (!base) return name;
+    return base.replace(/\/?$/, "/") + name.replace(/^\//, "");
+  }
+
+  /** Encode each path segment for GET (directory listing); keep trailing slash. */
+  function toFetchDirUrl(path) {
+    var s = path.replace(/\/?$/, "");
+    if (!s) return "./";
+    return (
+      s
+        .split("/")
+        .filter(function (x) {
+          return x.length > 0;
+        })
+        .map(function (seg) {
+          return encodeURIComponent(seg);
+        })
+        .join("/") + "/"
+    );
+  }
+
+  function parseDirectoryListing(html) {
+    var dirs = [];
+    var files = [];
+    var re = /href="([^"]+)"/gi;
+    var m;
+    while ((m = re.exec(html)) !== null) {
+      var h = m[1].split("#")[0];
+      if (!h || h === ".." || h.indexOf("javascript:") === 0) continue;
+      try {
+        h = decodeURIComponent(h);
+      } catch (e) {}
+      if (h.endsWith("/")) {
+        var name = h.replace(/\/+$/, "").split("/").pop();
+        if (name && name !== "..") dirs.push(name);
+      } else {
+        var leaf = h.split("/").pop();
+        if (leaf && leaf.indexOf("?") < 0) files.push(leaf);
+      }
+    }
+    return { dirs: dirs, files: files };
+  }
+
+  function stemName(f) {
+    return f.replace(/\.(atlas|skel)$/i, "");
+  }
+
+  function pickBestAtlasSkel(atlases, skels) {
+    var out = { atlas: "", skel: "" };
+    if (!atlases.length || !skels.length) {
+      if (atlases.length === 1) out.atlas = atlases[0];
+      if (skels.length === 1) out.skel = skels[0];
+      return out;
+    }
+    var skelList = skels;
+    for (var i = 0; i < atlases.length; i++) {
+      var sa = stemName(atlases[i]);
+      for (var j = 0; j < skelList.length; j++) {
+        if (stemName(skelList[j]) === sa) {
+          out.atlas = atlases[i];
+          out.skel = skelList[j];
+          return out;
+        }
+      }
+    }
+    out.atlas = atlases[0];
+    out.skel = skelList[0];
+    return out;
+  }
+
+  function applyBundleFolder(folderName) {
+    var scanRoot = (document.getElementById("scan-root").value.trim() || "exported").replace(/\/?$/, "");
+    document.getElementById("base").value = scanRoot + "/" + folderName + "/";
+  }
+
+  function syncAtlasSkelInputsFromSelects() {
+    var a = document.getElementById("atlas-select").value;
+    var s = document.getElementById("skel-select").value;
+    document.getElementById("atlas").value = a || "";
+    document.getElementById("skel").value = s || "";
+  }
+
+  function resetAtlasSkelSelectsPlaceholder() {
+    var atlasSel = document.getElementById("atlas-select");
+    var skelSel = document.getElementById("skel-select");
+    atlasSel.innerHTML = "";
+    skelSel.innerHTML = "";
+    var oa = document.createElement("option");
+    oa.value = "";
+    oa.textContent = "Pick an export folder first…";
+    atlasSel.appendChild(oa);
+    var os = document.createElement("option");
+    os.value = "";
+    os.textContent = "Pick an export folder first…";
+    skelSel.appendChild(os);
+    atlasSel.disabled = true;
+    skelSel.disabled = true;
+  }
+
+  function sortFileNames(names) {
+    return names.slice().sort(function (a, b) {
+      return a.toLowerCase().localeCompare(b.toLowerCase());
+    });
+  }
+
+  function isRasterImageFile(name) {
+    return /\.(png|jpg|jpeg|webp|gif)$/i.test(name);
+  }
+
+  function isSpineBgFolderName(name) {
+    return /^spine_bg_/i.test(name) 
+		|| /^battlemap/i.test(name)
+		|| /^map_/i.test(name)
+		|| /^uieffect/i.test(name)
+		|| /^background_/i.test(name);
+  }
+
+  function rebuildBgImageSelect(folderResults, prevValue) {
+    var sel = document.getElementById("bg-image");
+    if (!sel) return 0;
+    sel.innerHTML = "";
+    var o0 = document.createElement("option");
+    o0.value = "";
+    o0.textContent = "— No background —";
+    sel.appendChild(o0);
+    var flat = [];
+    for (var i = 0; i < folderResults.length; i++) {
+      var fr = folderResults[i];
+      if (!fr || !fr.folder) continue;
+      for (var j = 0; j < fr.imgs.length; j++) {
+        flat.push({ folder: fr.folder, file: fr.imgs[j] });
+      }
+    }
+    flat.sort(function (a, b) {
+      return (a.folder + "/" + a.file).toLowerCase().localeCompare((b.folder + "/" + b.file).toLowerCase());
+    });
+    for (var k = 0; k < flat.length; k++) {
+      var item = flat[k];
+      var v = item.folder + "/" + item.file;
+      var opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v;
+      sel.appendChild(opt);
+    }
+    sel.disabled = false;
+    if (prevValue) {
+      var found = false;
+      for (var p = 0; p < sel.options.length; p++) {
+        if (sel.options[p].value === prevValue) {
+          sel.selectedIndex = p;
+          found = true;
+          break;
+        }
+      }
+      if (!found) sel.selectedIndex = 0;
+    }
+    return flat.length;
+  }
+
+  function disposeBgGlObjects() {
+    if (!gl) return;
+    try {
+      if (bgTexture) gl.deleteTexture(bgTexture);
+      if (bgProgram) gl.deleteProgram(bgProgram);
+      if (bgVbo) gl.deleteBuffer(bgVbo);
+    } catch (e) {}
+    bgTexture = null;
+    bgProgram = null;
+    bgVbo = null;
+    bgAttribPos = -1;
+    bgAttribUv = -1;
+    bgUniformMvp = null;
+    bgUniformTex = null;
+  }
+
+  /**
+   * UVs for object-fit: cover. WebGL texImage2D from Image: bitmap top row → texture t=1, bottom → t=0.
+   * vTop/vBot are fractions from the bitmap top (0 top, 1 bottom).
+   */
+  function coverImageUvCorners(iw, ih, viewW, viewH) {
+    if (!(iw > 0) || !(ih > 0) || !(viewW > 0) || !(viewH > 0)) {
+      return { bl: { u: 0, v: 0 }, br: { u: 1, v: 0 }, tr: { u: 1, v: 1 }, tl: { u: 0, v: 1 } };
+    }
+    var imgAspect = iw / ih;
+    var viewAspect = viewW / viewH;
+    var u0 = 0;
+    var u1 = 1;
+    var vTop = 0;
+    var vBot = 1;
+    if (viewAspect > imgAspect) {
+      var frac = imgAspect / viewAspect;
+      vTop = (1 - frac) / 2;
+      vBot = 1 - vTop;
+    } else {
+      var frac2 = viewAspect / imgAspect;
+      u0 = (1 - frac2) / 2;
+      u1 = 1 - u0;
+    }
+    var tTop = 1 - vTop;
+    var tBot = 1 - vBot;
+    return {
+      bl: { u: u0, v: tBot },
+      br: { u: u1, v: tBot },
+      tr: { u: u1, v: tTop },
+      tl: { u: u0, v: tTop }
+    };
+  }
+
+  function uploadBgTextureFromImage(img) {
+    if (!gl || !img || !(img.naturalWidth > 0)) return;
+    if (bgTexture) gl.deleteTexture(bgTexture);
+    bgTexture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, bgTexture);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    bgImageEl = img;
+  }
+
+  function ensureBgProgram() {
+    if (bgProgram || !gl) return;
+    var vsSrc =
+      "attribute vec2 a_position;\n" +
+      "attribute vec2 a_uv;\n" +
+      "uniform mat4 u_mvp;\n" +
+      "varying vec2 v_uv;\n" +
+      "void main(){ v_uv=a_uv; gl_Position=u_mvp*vec4(a_position,0.0,1.0); }\n";
+    var fsSrc =
+      "precision mediump float;\n" +
+      "varying vec2 v_uv;\n" +
+      "uniform sampler2D u_tex;\n" +
+      "void main(){ vec2 uv=vec2(1.0-v_uv.x,1.0-v_uv.y); gl_FragColor=texture2D(u_tex,uv); }\n";
+    var vs = gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vs, vsSrc);
+    gl.compileShader(vs);
+    if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
+      console.warn("[spine-viewer] bg VS:", gl.getShaderInfoLog(vs));
+      gl.deleteShader(vs);
+      return;
+    }
+    var fs = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fs, fsSrc);
+    gl.compileShader(fs);
+    if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+      console.warn("[spine-viewer] bg FS:", gl.getShaderInfoLog(fs));
+      gl.deleteShader(vs);
+      gl.deleteShader(fs);
+      return;
+    }
+    bgProgram = gl.createProgram();
+    gl.attachShader(bgProgram, vs);
+    gl.attachShader(bgProgram, fs);
+    gl.linkProgram(bgProgram);
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    if (!gl.getProgramParameter(bgProgram, gl.LINK_STATUS)) {
+      console.warn("[spine-viewer] bg program:", gl.getProgramInfoLog(bgProgram));
+      gl.deleteProgram(bgProgram);
+      bgProgram = null;
+      return;
+    }
+    bgAttribPos = gl.getAttribLocation(bgProgram, "a_position");
+    bgAttribUv = gl.getAttribLocation(bgProgram, "a_uv");
+    bgUniformMvp = gl.getUniformLocation(bgProgram, "u_mvp");
+    bgUniformTex = gl.getUniformLocation(bgProgram, "u_tex");
+    bgVbo = gl.createBuffer();
+  }
+
+  function drawBackgroundLayer() {
+    if (!gl || !bgTexture || !bgImageEl || !mvp || !skeleton) return;
+    var iw = bgImageEl.naturalWidth;
+    var ih = bgImageEl.naturalHeight;
+    if (!(iw > 0) || !(ih > 0)) return;
+    ensureBgProgram();
+    if (!bgProgram || bgAttribPos < 0 || bgAttribUv < 0) return;
+
+    var cx = lastViewCenterX;
+    var cy = lastViewCenterY;
+    var hw = lastOrthoWorldW * 0.5;
+    var hh = lastOrthoWorldH * 0.5;
+    var x0 = cx - hw;
+    var x1 = cx + hw;
+    var y0 = cy - hh;
+    var y1 = cy + hh;
+    var uv = coverImageUvCorners(iw, ih, lastOrthoWorldW, lastOrthoWorldH);
+
+    var data = new Float32Array([
+      x0,
+      y0,
+      uv.bl.u,
+      uv.bl.v,
+      x1,
+      y0,
+      uv.br.u,
+      uv.br.v,
+      x1,
+      y1,
+      uv.tr.u,
+      uv.tr.v,
+      x0,
+      y1,
+      uv.tl.u,
+      uv.tl.v
+    ]);
+
+    gl.disable(gl.SCISSOR_TEST);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    gl.useProgram(bgProgram);
+    gl.uniformMatrix4fv(bgUniformMvp, false, mvp.values);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, bgTexture);
+    gl.uniform1i(bgUniformTex, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, bgVbo);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(bgAttribPos);
+    gl.enableVertexAttribArray(bgAttribUv);
+    gl.vertexAttribPointer(bgAttribPos, 2, gl.FLOAT, false, 16, 0);
+    gl.vertexAttribPointer(bgAttribUv, 2, gl.FLOAT, false, 16, 8);
+    gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+    gl.disableVertexAttribArray(bgAttribPos);
+    gl.disableVertexAttribArray(bgAttribUv);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    gl.useProgram(null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
+  function bgImageUrlFromSelection() {
+    var v = document.getElementById("bg-image") && document.getElementById("bg-image").value;
+    if (!v || !v.trim()) return "";
+    var scanRoot = (document.getElementById("scan-root").value.trim() || "exported").replace(/\/?$/, "");
+    return joinUrl(scanRoot + "/", v.trim());
+  }
+
+  function loadBackgroundFromSelection() {
+    var url = bgImageUrlFromSelection();
+    if (!url) {
+      bgImageUrl = "";
+      if (bgTexture && gl) {
+        gl.deleteTexture(bgTexture);
+        bgTexture = null;
+      }
+      bgImageEl = null;
+      return;
+    }
+    if (url === bgImageUrl && bgImageEl && bgImageEl.complete && bgImageEl.naturalWidth > 0 && gl) {
+      uploadBgTextureFromImage(bgImageEl);
+      return;
+    }
+    bgImageUrl = url;
+    var img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = function () {
+      if (bgImageUrl !== url) return;
+      bgImageEl = img;
+      if (gl) uploadBgTextureFromImage(img);
+    };
+    img.onerror = function () {
+      if (bgImageUrl !== url) return;
+      setStatus("Background image failed to load: " + url, true);
+      bgImageUrl = "";
+      bgImageEl = null;
+      if (bgTexture && gl) {
+        gl.deleteTexture(bgTexture);
+        bgTexture = null;
+      }
+    };
+    img.src = url;
+  }
+
+  function maybeReloadBackgroundTexture() {
+    loadBackgroundFromSelection();
+  }
+
+  function beginRenderLoop() {
+    maybeReloadBackgroundTexture();
+    rafId = requestAnimationFrame(render);
+  }
+
+  /** Fill atlas/skel dropdowns from a directory listing’s file names; keep prior picks when still valid. */
+  function populateAtlasSkelDropdowns(filesList) {
+    var atlases = sortFileNames(
+      filesList.filter(function (f) {
+        return /\.atlas$/i.test(f);
+      })
+    );
+    var skels = sortFileNames(
+      filesList.filter(function (f) {
+        return /\.skel$/i.test(f);
+      })
+    );
+
+    var atlasSel = document.getElementById("atlas-select");
+    var skelSel = document.getElementById("skel-select");
+    var prevAtlas = document.getElementById("atlas").value.trim();
+    var prevSkel = document.getElementById("skel").value.trim();
+
+    atlasSel.innerHTML = "";
+    skelSel.innerHTML = "";
+
+    if (!atlases.length) {
+      var oa = document.createElement("option");
+      oa.value = "";
+      oa.textContent = "(no .atlas in folder)";
+      atlasSel.appendChild(oa);
+      atlasSel.disabled = true;
+    } else {
+      atlasSel.disabled = false;
+      for (var i = 0; i < atlases.length; i++) {
+        var opt = document.createElement("option");
+        opt.value = atlases[i];
+        opt.textContent = atlases[i];
+        atlasSel.appendChild(opt);
+      }
+    }
+
+    if (!skels.length) {
+      var os = document.createElement("option");
+      os.value = "";
+      os.textContent = "(no .skel in folder)";
+      skelSel.appendChild(os);
+      skelSel.disabled = true;
+    } else {
+      skelSel.disabled = false;
+      for (var j = 0; j < skels.length; j++) {
+        var opt2 = document.createElement("option");
+        opt2.value = skels[j];
+        opt2.textContent = skels[j];
+        skelSel.appendChild(opt2);
+      }
+    }
+
+    var pair = pickBestAtlasSkel(atlases, skels);
+    var pickAtlas = atlases.indexOf(prevAtlas) >= 0 ? prevAtlas : pair.atlas;
+    var pickSkel = skels.indexOf(prevSkel) >= 0 ? prevSkel : pair.skel;
+
+    if (pickAtlas && !atlasSel.disabled) {
+      atlasSel.value = pickAtlas;
+    }
+    if (pickSkel && !skelSel.disabled) {
+      skelSel.value = pickSkel;
+    }
+    syncAtlasSkelInputsFromSelects();
+  }
+
+  function selectSkelMatchingAtlasStem() {
+    var atlasSel = document.getElementById("atlas-select");
+    var skelSel = document.getElementById("skel-select");
+    if (atlasSel.disabled || skelSel.disabled) return;
+    var av = atlasSel.value;
+    if (!av) return;
+    var stem = stemName(av);
+    for (var i = 0; i < skelSel.options.length; i++) {
+      var v = skelSel.options[i].value;
+      if (v && stemName(v) === stem) {
+        skelSel.selectedIndex = i;
+        document.getElementById("skel").value = v;
+        return;
+      }
+    }
+  }
+
+  function selectAtlasMatchingSkelStem() {
+    var atlasSel = document.getElementById("atlas-select");
+    var skelSel = document.getElementById("skel-select");
+    if (atlasSel.disabled || skelSel.disabled) return;
+    var sv = skelSel.value;
+    if (!sv) return;
+    var stem = stemName(sv);
+    for (var i = 0; i < atlasSel.options.length; i++) {
+      var v = atlasSel.options[i].value;
+      if (v && stemName(v) === stem) {
+        atlasSel.selectedIndex = i;
+        document.getElementById("atlas").value = v;
+        return;
+      }
+    }
+  }
+
+  function detectAtlasSkelForCurrentBase() {
+    var base = document.getElementById("base").value.trim();
+    if (!base) {
+      resetAtlasSkelSelectsPlaceholder();
+      return Promise.resolve();
+    }
+    var url = toFetchDirUrl(base);
+    return fetch(url)
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.status + " " + r.statusText);
+        return r.text();
+      })
+      .then(function (html) {
+        var list = parseDirectoryListing(html);
+        populateAtlasSkelDropdowns(list.files);
+      });
+  }
+
+  function trySyncAdvancedAtlasSkelToSelects() {
+    var a = document.getElementById("atlas").value.trim();
+    var s = document.getElementById("skel").value.trim();
+    var atlasSel = document.getElementById("atlas-select");
+    var skelSel = document.getElementById("skel-select");
+    if (!atlasSel.disabled) {
+      for (var i = 0; i < atlasSel.options.length; i++) {
+        if (atlasSel.options[i].value === a) {
+          atlasSel.selectedIndex = i;
+          break;
+        }
+      }
+    }
+    if (!skelSel.disabled) {
+      for (var j = 0; j < skelSel.options.length; j++) {
+        if (skelSel.options[j].value === s) {
+          skelSel.selectedIndex = j;
+          break;
+        }
+      }
+    }
+  }
+
+  function folderMatchesSearch(name, q) {
+    if (!q) return true;
+    return name.toLowerCase().indexOf(q) >= 0;
+  }
+
+  function rebuildBundleSelect() {
+    var searchEl = document.getElementById("bundle-search");
+    var q = (searchEl && searchEl.value ? searchEl.value : "").trim().toLowerCase();
+    var sel = document.getElementById("bundle-select");
+    var prev = sel.value;
+    sel.innerHTML = "";
+    var opt0 = document.createElement("option");
+    opt0.value = "";
+    opt0.textContent = "— Pick a spine folder —";
+    sel.appendChild(opt0);
+
+    var added = {};
+    if (prev && bundleFolderList.indexOf(prev) >= 0 && !folderMatchesSearch(prev, q)) {
+      var oKeep = document.createElement("option");
+      oKeep.value = prev;
+      oKeep.textContent = prev + " (current)";
+      sel.appendChild(oKeep);
+      added[prev] = true;
+    }
+
+    for (var i = 0; i < bundleFolderList.length; i++) {
+      var name = bundleFolderList[i];
+      if (added[name]) continue;
+      if (!folderMatchesSearch(name, q)) continue;
+      var o = document.createElement("option");
+      o.value = name;
+      o.textContent = name;
+      sel.appendChild(o);
+      added[name] = true;
+    }
+
+    var shown = sel.options.length - 1;
+    for (var j = 0; j < sel.options.length; j++) {
+      if (sel.options[j].value === prev) {
+        sel.selectedIndex = j;
+        return shown;
+      }
+    }
+    return shown;
+  }
+
+  function uniqueSortedDirsFromListing(list) {
+    var raw = list.dirs || [];
+    var dirs = raw.filter(function (d, i, a) {
+      return a.indexOf(d) === i;
+    });
+    dirs.sort(function (a, b) {
+      return a.toLowerCase().localeCompare(b.toLowerCase());
+    });
+    return dirs;
+  }
+
+  function loadBackgroundImagesFromBgDirs(scanRoot, bgDirs, prevBg) {
+    var bgListPromises = bgDirs.map(function (folder) {
+      return fetch(toFetchDirUrl(scanRoot + "/" + folder + "/"))
+        .then(function (r) {
+          return r.ok ? r.text() : "";
+        })
+        .then(function (html) {
+          var list = parseDirectoryListing(html);
+          var imgs = sortFileNames(list.files.filter(isRasterImageFile));
+          return { folder: folder, imgs: imgs };
+        })
+        .catch(function () {
+          return { folder: folder, imgs: [] };
+        });
+    });
+    return Promise.all(bgListPromises).then(function (folderResults) {
+      return rebuildBgImageSelect(folderResults, prevBg);
+    });
+  }
+
+  /** Lines from spine-folders.txt (non-#); optional exported/ or scan-root/ prefix stripped. */
+  function parseSpineFoldersManifest(text, scanRoot) {
+    var names = [];
+    var seen = {};
+    var sr = scanRoot.replace(/\/?$/, "").replace(/\\/g, "/");
+    var lines = text.split(/\r?\n/);
+    for (var i = 0; i < lines.length; i++) {
+      var raw = lines[i].trim();
+      if (!raw || raw.charAt(0) === "#") continue;
+      var name = raw.replace(/\\/g, "/").replace(/^\/+/, "");
+      var lower = name.toLowerCase();
+      var prefix = sr.toLowerCase() + "/";
+      if (lower.indexOf(prefix) === 0) {
+        name = name.slice(sr.length + 1);
+      } else if (lower.indexOf("exported/") === 0) {
+        name = name.slice("exported/".length);
+      }
+      name = name.replace(/\/+$/, "");
+      if (!name || seen[name]) continue;
+      seen[name] = true;
+      names.push(name);
+    }
+    names.sort(function (a, b) {
+      return a.toLowerCase().localeCompare(b.toLowerCase());
+    });
+    return names;
+  }
+
+  /** If spine-folders.txt exists next to this page, use it for Exported spine; still loads bg images from directory listing. */
+  function tryLoadSpineFoldersManifest() {
+    var scanRoot = (document.getElementById("scan-root").value.trim() || "exported").replace(/\/?$/, "");
+    setStatus("Loading spine-folders.txt …", false);
+    return fetch("spine-folders.txt", { cache: "no-store" })
+      .then(function (r) {
+        if (!r.ok) return null;
+        return r.text();
+      })
+      .then(function (text) {
+        if (text === null) return Promise.resolve(false);
+        var names = parseSpineFoldersManifest(text, scanRoot);
+        bundleFolderList = names;
+        var prev = document.getElementById("bundle-select").value;
+        var shown = rebuildBundleSelect();
+        if (!prev) syncBundleSelectFromBase();
+        var q = (document.getElementById("bundle-search").value || "").trim();
+        var extra = q ? " · " + shown + " match filter" : "";
+        var prevBg = document.getElementById("bg-image") ? document.getElementById("bg-image").value : "";
+        return fetch(toFetchDirUrl(scanRoot + "/"))
+          .then(function (r) {
+            if (!r.ok) return "";
+            return r.text();
+          })
+          .catch(function () {
+            return "";
+          })
+          .then(function (html) {
+            var list = html ? parseDirectoryListing(html) : { dirs: [], files: [] };
+            var dirs = uniqueSortedDirsFromListing(list);
+            var bgDirs = dirs.filter(isSpineBgFolderName);
+            return loadBackgroundImagesFromBgDirs(scanRoot, bgDirs, prevBg).then(function (nBg) {
+              setStatus(
+                "Loaded " +
+                  bundleFolderList.length +
+                  " spine folder(s) from spine-folders.txt; " +
+                  nBg +
+                  " bg image(s) under " +
+                  scanRoot +
+                  "/" +
+                  extra,
+                false
+              );
+              if (document.getElementById("base").value.trim()) {
+                detectAtlasSkelForCurrentBase().catch(function () {});
+              } else {
+                resetAtlasSkelSelectsPlaceholder();
+              }
+              return true;
+            });
+          });
+      })
+      .catch(function () {
+        return false;
+      });
+  }
+
+  function scanExportedFolders() {
+    var scanRoot = (document.getElementById("scan-root").value.trim() || "exported").replace(/\/?$/, "");
+    var url = toFetchDirUrl(scanRoot + "/");
+    setStatus("Scanning " + scanRoot + "/ …", false);
+    return fetch(url)
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.status + " " + r.statusText);
+        return r.text();
+      })
+      .then(function (html) {
+        var list = parseDirectoryListing(html);
+        var dirs = uniqueSortedDirsFromListing(list);
+        var bgDirs = dirs.filter(isSpineBgFolderName);
+        bundleFolderList = dirs.filter(function (d) {
+          return !isSpineBgFolderName(d);
+        });
+        var prev = document.getElementById("bundle-select").value;
+        var shown = rebuildBundleSelect();
+        if (!prev) syncBundleSelectFromBase();
+        var q = (document.getElementById("bundle-search").value || "").trim();
+        var extra = q ? " · " + shown + " match filter" : "";
+        var prevBg = document.getElementById("bg-image") ? document.getElementById("bg-image").value : "";
+        return loadBackgroundImagesFromBgDirs(scanRoot, bgDirs, prevBg).then(function (nBg) {
+          var spineN = bundleFolderList.length;
+          setStatus(
+            "Found " +
+              spineN +
+              " spine folder(s), " +
+              bgDirs.length +
+              " spine_bg_* folder(s), " +
+              nBg +
+              " bg image(s) under " +
+              scanRoot +
+              "/" +
+              extra,
+            false
+          );
+          if (document.getElementById("base").value.trim()) {
+            detectAtlasSkelForCurrentBase().catch(function () {});
+          } else {
+            resetAtlasSkelSelectsPlaceholder();
+          }
+        });
+      })
+      .catch(function (e) {
+        setStatus(
+          "Scan failed (" +
+            e.message +
+            "). Serve this folder over HTTP (e.g. serve-viewer.ps1); file:// cannot list directories.",
+          true
+        );
+      });
+  }
+
+  function mountPrepare() {
+    var bundle = document.getElementById("bundle-select").value;
+    if (bundle) {
+      applyBundleFolder(bundle);
+      return detectAtlasSkelForCurrentBase();
+    }
+    var base = document.getElementById("base").value.trim();
+    if (base) {
+      return detectAtlasSkelForCurrentBase();
+    }
+    return Promise.resolve();
+  }
+
+  /** If #base already matches scan-root/<folder>/, select that folder in the dropdown. */
+  function syncBundleSelectFromBase() {
+    var base = document.getElementById("base").value.trim().replace(/\/+$/, "");
+    var scanRoot = (document.getElementById("scan-root").value.trim() || "exported").replace(/\/?$/, "");
+    var prefix = scanRoot + "/";
+    if (base.indexOf(prefix) !== 0) return;
+    var rest = base.slice(prefix.length);
+    var folder = rest.split("/")[0];
+    if (!folder || bundleFolderList.indexOf(folder) < 0) return;
+    var sel = document.getElementById("bundle-select");
+    var found = false;
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === folder) {
+        sel.selectedIndex = i;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      var searchEl = document.getElementById("bundle-search");
+      if (searchEl && searchEl.value) {
+        searchEl.value = "";
+        rebuildBundleSelect();
+        for (var j = 0; j < sel.options.length; j++) {
+          if (sel.options[j].value === folder) {
+            sel.selectedIndex = j;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * AABB in skeleton world space (call after updateWorldTransform).
+   * Important: getBounds can return w or h in (0,1) or exactly 0 (line/point/collapsed hull)
+   * while many slots still draw. Old code then replaced bounds with 512×768 at origin → camera
+   * missed characters that live far from (0,0). Only replace bounds when values are non-finite.
+   */
+  function boundsFromCurrentPose(sk) {
+    var offset = new spine.Vector2();
+    var size = new spine.Vector2();
+    sk.getBounds(offset, size, []);
+    var w = size.x;
+    var h = size.y;
+    if (!isFinite(w) || !isFinite(h)) {
+      var dw = sk.data.width > 1 ? sk.data.width : 512;
+      var dh = sk.data.height > 1 ? sk.data.height : 768;
+      offset.set(typeof sk.data.x === "number" ? sk.data.x : 0, typeof sk.data.y === "number" ? sk.data.y : 0);
+      size.set(dw, dh);
+      return { offset: offset, size: size };
+    }
+    if (w < 1 || h < 1) {
+      var cx = offset.x + w * 0.5;
+      var cy = offset.y + h * 0.5;
+      var minW = Math.max(w, sk.data.width > 1 ? sk.data.width : 400);
+      var minH = Math.max(h, sk.data.height > 1 ? sk.data.height : 600);
+      offset.set(cx - minW * 0.5, cy - minH * 0.5);
+      size.set(minW, minH);
+    }
+    var maxDim = Math.max(size.x, size.y);
+    if (maxDim > 25000) {
+      var rb = sk.getRootBone();
+      var rcx = rb ? rb.worldX : 0;
+      var rcy = rb ? rb.worldY : 0;
+      offset.set(rcx - 600, rcy - 600);
+      size.set(1200, 1200);
+    }
+    return { offset: offset, size: size };
+  }
+
+  /** Sample drawable attachments: NaN verts / missing GL texture / WebGL errors explain a blank screen. */
+  function diagnoseDrawable(sk) {
+    var nanV = 0;
+    var noTex = 0;
+    var ok = 0;
+    var checked = 0;
+    var tmp = new Float32Array(4096);
+    for (var i = 0; i < sk.drawOrder.length && checked < 40; i++) {
+      var slot = sk.drawOrder[i];
+      var a = slot.getAttachment();
+      if (a instanceof spine.RegionAttachment) {
+        checked++;
+        a.computeWorldVertices(slot.bone, tmp, 0, 2);
+        if (!isFinite(tmp[0]) || !isFinite(tmp[1])) {
+          nanV++;
+          continue;
+        }
+        var r = a.region;
+        var tex = r && r.renderObject && r.renderObject.texture;
+        if (!tex) noTex++;
+        else ok++;
+      } else if (a instanceof spine.MeshAttachment) {
+        checked++;
+        var wl = a.worldVerticesLength;
+        if (wl > tmp.length) continue;
+        a.computeWorldVertices(slot, 0, wl, tmp, 0, 2);
+        if (!isFinite(tmp[0]) || !isFinite(tmp[1])) {
+          nanV++;
+          continue;
+        }
+        var r2 = a.region;
+        var tex2 = r2 && r2.renderObject && r2.renderObject.texture;
+        if (!tex2) noTex++;
+        else ok++;
+      }
+    }
+    return "drawable sample: ok=" + ok + " nanVerts=" + nanV + " noTex=" + noTex + " (of " + checked + " checked)";
+  }
+
+  function countDrawableSlots(sk) {
+    var n = 0;
+    for (var i = 0; i < sk.slots.length; i++) {
+      var a = sk.slots[i].getAttachment();
+      if (a instanceof spine.RegionAttachment || a instanceof spine.MeshAttachment) n++;
+    }
+    return n;
+  }
+
+  function countSkinEntries(skin) {
+    if (skin == null) return 0;
+    return skin.getAttachments().length;
+  }
+
+  /**
+   * Game Spine exports often put different body parts on different skins (default + outfit + weapon, etc.).
+   * Picking only default or the “largest” skin leaves attachments on other skins unused → missing limbs/props.
+   * Merge all skins so every attachment is available to slots and attachment timelines.
+   */
+  function buildCombinedDisplaySkin(skeletonData) {
+    var skins = skeletonData.skins;
+    if (!skins || skins.length === 0) return skeletonData.defaultSkin || null;
+    if (skins.length === 1) return skins[0];
+    var combined = new spine.Skin("preview (all skins)");
+    for (var i = 0; i < skins.length; i++) {
+      if (skins[i]) combined.addSkin(skins[i]);
+    }
+    return countSkinEntries(combined) > 0 ? combined : skins[0];
+  }
+
+  /** Optional: ?skin=ExactSkinName to show one skin only (debug). */
+  function pickDisplaySkin(skeletonData, skinNameFromQuery) {
+    if (skinNameFromQuery) {
+      var found = skeletonData.findSkin(skinNameFromQuery);
+      if (found) return found;
+    }
+    return buildCombinedDisplaySkin(skeletonData);
+  }
+
+  function resetSkinSelect() {
+    var sel = document.getElementById("skin-select");
+    if (!sel) return;
+    sel.innerHTML = "";
+    var o = document.createElement("option");
+    o.value = "";
+    o.textContent = "— Load skeleton first —";
+    sel.appendChild(o);
+    sel.disabled = true;
+  }
+
+  function fillSkinSelect(skeletonData) {
+    var sel = document.getElementById("skin-select");
+    if (!sel) return;
+    sel.innerHTML = "";
+    var om = document.createElement("option");
+    om.value = "";
+    om.textContent = "All skins merged (every character)";
+    sel.appendChild(om);
+    var skins = skeletonData.skins || [];
+    var seen = {};
+    for (var i = 0; i < skins.length; i++) {
+      var sk = skins[i];
+      if (!sk || !sk.name || seen[sk.name]) continue;
+      seen[sk.name] = true;
+      var opt = document.createElement("option");
+      opt.value = sk.name;
+      opt.textContent = sk.name;
+      sel.appendChild(opt);
+    }
+    sel.disabled = false;
+    if (skinQuery && skeletonData.findSkin(skinQuery)) sel.value = skinQuery;
+    else sel.value = "";
+  }
+
+  /** Non-empty = single skin from dropdown or ?skin= URL; empty = merged. */
+  function getActiveSkinName() {
+    var sel = document.getElementById("skin-select");
+    if (sel && !sel.disabled) {
+      var v = sel.value;
+      if (v && String(v).trim()) return String(v).trim();
+      return "";
+    }
+    return skinQuery;
+  }
+
+  function applyDisplaySkinFromUi() {
+    if (!skeleton) return;
+    var skin = pickDisplaySkin(skeleton.data, getActiveSkinName());
+    if (skin == null) return;
+    skeleton.setSkin(skin);
+    if (setupPoseOnly) {
+      skeleton.setToSetupPose();
+    } else {
+      skeleton.setSlotsToSetupPose();
+    }
+    attachOrphanSkinAttachments(skeleton, skeleton.skin);
+    if (!setupPoseOnly && animationState) {
+      animationState.apply(skeleton);
+    }
+    skeleton.updateWorldTransform();
+    bounds = boundsFromCurrentPose(skeleton);
+    frameIdx = 0;
+    var ds = countDrawableSlots(skeleton);
+    diagLine = diagnoseDrawable(skeleton);
+    var sn = skeleton.skin != null ? skeleton.skin.name : "none";
+    setStatus("Skin: " + sn + " · drawable slots: " + ds + ". " + diagLine, ds === 0);
+  }
+
+  /**
+   * Slots with no default attachment in skeleton data stay empty after setSlotsToSetupPose(), even when
+   * the active skin defines regions/meshes for them (duo confession rigs often put the second character
+   * only in an alternate skin on those slots). Fill each such empty slot with the first drawable
+   * attachment the skin provides for that slot index.
+   * Do not call this after every animationState.apply() — it fights attachment timelines and looks
+   * “merged” / wrong. Use after setSlotsToSetupPose / setToSetupPose only (see render() setup branch).
+   */
+  function attachOrphanSkinAttachments(skeleton, skin) {
+    if (!skeleton || !skin || !skin.getAttachments) return 0;
+    var entries = skin.getAttachments();
+    var filled = 0;
+    for (var e = 0; e < entries.length; e++) {
+      var ent = entries[e];
+      var si = ent.slotIndex;
+      var slot = skeleton.slots[si];
+      if (!slot) continue;
+      var defName = slot.data.attachmentName;
+      if (defName != null && String(defName).length > 0) continue;
+      if (slot.getAttachment()) continue;
+      var nm = ent.name;
+      if (nm == null || nm === "") continue;
+      try {
+        var att = skeleton.getAttachment(si, nm);
+        if (att && (att instanceof spine.RegionAttachment || att instanceof spine.MeshAttachment)) {
+          slot.setAttachment(att);
+          filled++;
+        }
+      } catch (err) {}
+    }
+    return filled;
+  }
+
+  function resize() {
+    if (!canvas || !skeleton || !bounds || !gl || !mvp) return;
+    var dpr = typeof window.devicePixelRatio === "number" && window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
+    var qEl = document.getElementById("view-quality");
+    var qMult = parseFloat(qEl && qEl.value ? qEl.value : "1") || 1;
+    qMult = Math.min(3, Math.max(0.5, qMult));
+    var cssW = Math.max(1, canvas.clientWidth | 0);
+    var cssH = Math.max(1, canvas.clientHeight | 0);
+    var bufW = Math.min(4096, Math.max(1, Math.floor(cssW * dpr * qMult)));
+    var bufH = Math.min(4096, Math.max(1, Math.floor(cssH * dpr * qMult)));
+    if (canvas.width !== bufW || canvas.height !== bufH) {
+      canvas.width = bufW;
+      canvas.height = bufH;
+    }
+    var panFx = isFullscreenActive() ? viewPanX : 0;
+    var panFy = isFullscreenActive() ? viewPanY : 0;
+    var centerX = bounds.offset.x + bounds.size.x / 2 + panFx;
+    var centerY = bounds.offset.y + bounds.size.y / 2 + panFy;
+    var scaleX = bounds.size.x / bufW;
+    var scaleY = bounds.size.y / bufH;
+    var scale = Math.max(scaleX, scaleY) * 1.2;
+    if (scale < 1) scale = 1;
+    var zoomEl = document.getElementById("view-zoom");
+    var zPct = zoomEl ? parseInt(zoomEl.value, 10) : 100;
+    if (!isFinite(zPct) || zPct < 1) zPct = 100;
+    var zoomFactor = Math.max(0.25, Math.min(6, zPct / 100));
+    var width = (bufW * scale) / zoomFactor;
+    var height = (bufH * scale) / zoomFactor;
+    lastOrthoWorldW = width;
+    lastOrthoWorldH = height;
+    lastViewCenterX = centerX;
+    lastViewCenterY = centerY;
+    mvp.ortho2d(centerX - width / 2, centerY - height / 2, width, height);
+    gl.viewport(0, 0, bufW, bufH);
+    gl.disable(gl.SCISSOR_TEST);
+  }
+
+  function render() {
+    var now = Date.now() / 1000;
+    var delta = now - lastFrameTime;
+    lastFrameTime = now;
+    if (delta > 0.1) delta = 0.1;
+
+    if (setupPoseOnly) {
+      skeleton.setToSetupPose();
+      if (skeleton.skin) attachOrphanSkinAttachments(skeleton, skeleton.skin);
+      skeleton.updateWorldTransform();
+    } else {
+      animationState.update(delta);
+      animationState.apply(skeleton);
+      skeleton.updateWorldTransform();
+    }
+
+    /* Camera must match the *current* pose; setup-pose bounds miss animated offset → blank canvas. */
+    bounds = boundsFromCurrentPose(skeleton);
+    resize();
+
+    gl.clearColor(0.067, 0.067, 0.071, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    drawBackgroundLayer();
+
+    shader.bind();
+    shader.setUniformi(spine.webgl.Shader.SAMPLER, 0);
+    shader.setUniform4x4f(spine.webgl.Shader.MVP_MATRIX, mvp.values);
+    batcher.begin(shader);
+    skeletonRenderer.premultipliedAlpha = premultipliedAlpha;
+    skeletonRenderer.draw(batcher, skeleton);
+    batcher.end();
+    shader.unbind();
+
+    if (typeof window !== "undefined" && urlParams.has("peek")) {
+      window.__spinePeek = (function () {
+        var peek = {
+          lastDrawCalls: batcher.getDrawCalls(),
+          bounds: bounds
+            ? { ox: bounds.offset.x, oy: bounds.offset.y, sx: bounds.size.x, sy: bounds.size.y }
+            : null,
+          mvp: mvp ? Array.prototype.slice.call(mvp.values) : null,
+          slotColors: [],
+          firstDrawableWorld: null,
+          clipXY: null
+        };
+        if (!skeleton) return peek;
+        var tmp = new Float32Array(16);
+        for (var i = 0; i < skeleton.drawOrder.length; i++) {
+          var sl = skeleton.drawOrder[i];
+          var a = sl.getAttachment();
+          if (a instanceof spine.RegionAttachment) {
+            a.computeWorldVertices(sl.bone, tmp, 0, 2);
+            peek.firstDrawableWorld = { x: tmp[0], y: tmp[1] };
+            peek.firstAttColor = { r: a.color.r, g: a.color.g, b: a.color.b, a: a.color.a };
+            break;
+          }
+          if (a instanceof spine.MeshAttachment && a.worldVerticesLength >= 2) {
+            a.computeWorldVertices(sl, 0, a.worldVerticesLength, tmp, 0, 2);
+            peek.firstDrawableWorld = { x: tmp[0], y: tmp[1] };
+            peek.firstAttColor = { r: a.color.r, g: a.color.g, b: a.color.b, a: a.color.a };
+            break;
+          }
+        }
+        if (peek.firstDrawableWorld && mvp && mvp.values) {
+          var m = mvp.values;
+          var wx = peek.firstDrawableWorld.x;
+          var wy = peek.firstDrawableWorld.y;
+          var clipx = m[0] * wx + m[4] * wy + m[12];
+          var clipy = m[1] * wx + m[5] * wy + m[13];
+          var clipw = m[3] * wx + m[7] * wy + m[15];
+          peek.clipXY = { clipx: clipx, clipy: clipy, clipw: clipw, ndcX: clipx / clipw, ndcY: clipy / clipw };
+        }
+        for (var j = 0; j < Math.min(12, skeleton.slots.length); j++) {
+          var sl2 = skeleton.slots[j];
+          var a2 = sl2.getAttachment();
+          peek.slotColors.push({
+            slot: sl2.data.name,
+            r: sl2.color.r,
+            g: sl2.color.g,
+            b: sl2.color.b,
+            a: sl2.color.a,
+            att: a2 && a2.constructor && a2.constructor.name ? a2.constructor.name : String(a2)
+          });
+        }
+        var big = new Float32Array(8192);
+        for (var ii = 0; ii < skeleton.drawOrder.length; ii++) {
+          var slm = skeleton.drawOrder[ii];
+          var am = slm.getAttachment();
+          if (am instanceof spine.MeshAttachment && am.worldVerticesLength <= big.length) {
+            am.computeWorldVertices(slm, 0, am.worldVerticesLength, big, 0, 2);
+            var wl = am.worldVerticesLength;
+            var minx = 1e30,
+              maxx = -1e30,
+              miny = 1e30,
+              maxy = -1e30;
+            for (var q = 0; q < wl; q += 2) {
+              var xx = big[q],
+                yy = big[q + 1];
+              if (isFinite(xx)) {
+                minx = Math.min(minx, xx);
+                maxx = Math.max(maxx, xx);
+                miny = Math.min(miny, yy);
+                maxy = Math.max(maxy, yy);
+              }
+            }
+            peek.meshWorldBB = { minx: minx, maxx: maxx, miny: miny, maxy: maxy, wl: wl, tris: am.triangles.length };
+            var uvs = am.uvs;
+            if (uvs && uvs.length) {
+              var mu = 1e30,
+                Mu = -1e30,
+                mv = 1e30,
+                Mv = -1e30;
+              for (var u = 0; u < uvs.length; u += 2) {
+                mu = Math.min(mu, uvs[u]);
+                Mu = Math.max(Mu, uvs[u]);
+                mv = Math.min(mv, uvs[u + 1]);
+                Mv = Math.max(Mv, uvs[u + 1]);
+              }
+              peek.uvBB = { u0: mu, u1: Mu, v0: mv, v1: Mv };
+            }
+            break;
+          }
+        }
+        return peek;
+      })();
+    }
+
+    var err = gl.getError();
+    if (err !== gl.NO_ERROR && frameIdx < 5) {
+      console.warn("[spine-viewer] WebGL error after draw:", err);
+    }
+
+    if (document.getElementById("debug-bones").checked) {
+      debugShader.bind();
+      debugShader.setUniform4x4f(spine.webgl.Shader.MVP_MATRIX, mvp.values);
+      skeletonDebugRenderer.premultipliedAlpha = premultipliedAlpha;
+      shapeRenderer.begin(debugShader);
+      skeletonDebugRenderer.draw(shapeRenderer, skeleton, null);
+      shapeRenderer.end();
+      debugShader.unbind();
+    }
+
+    frameIdx++;
+    if (frameIdx === 1 || frameIdx % 120 === 0) {
+      var dc = batcher.getDrawCalls();
+      if (dc === 0 && countDrawableSlots(skeleton) > 0) {
+        console.warn("[spine-viewer] 0 batcher draw calls but drawable slots > 0 — check textures / blend / shader.");
+      }
+    }
+
+    rafId = requestAnimationFrame(render);
+  }
+
+  function waitAssets(done) {
+    var start = Date.now();
+    var timeoutMs = 120000;
+    function tick() {
+      if (Date.now() - start > timeoutMs) {
+        setAnimSelectPlaceholder("Load timed out");
+        setStatus(
+          "Timed out waiting for assets. Check DevTools Network (404?) and that the HTTP server root is this folder.",
+          true
+        );
+        return;
+      }
+      if (!assetManager.isLoadingComplete()) {
+        requestAnimationFrame(tick);
+        return;
+      }
+      if (assetManager.hasErrors()) {
+        var errs = assetManager.getErrors();
+        var parts = [];
+        for (var k in errs) {
+          if (Object.prototype.hasOwnProperty.call(errs, k)) parts.push(errs[k]);
+        }
+        setAnimSelectPlaceholder("Load failed");
+        setStatus(parts.join(" | ") || "AssetManager reported errors.", true);
+        return;
+      }
+      try {
+        done();
+      } catch (e) {
+        setAnimSelectPlaceholder("Parse error");
+        setStatus(String(e.message || e), true);
+        stopLoop();
+      }
+    }
+    tick();
+  }
+
+  function setAnimSelectPlaceholder(text) {
+    var sel = document.getElementById("anim-select");
+    sel.innerHTML = "";
+    var o = document.createElement("option");
+    o.value = "";
+    o.textContent = text;
+    sel.appendChild(o);
+    sel.disabled = true;
+  }
+
+  function fillAnimationSelect(skeletonData, selectedName) {
+    var sel = document.getElementById("anim-select");
+    sel.innerHTML = "";
+    var anims = skeletonData.animations || [];
+    if (anims.length === 0) {
+      var empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = "(no animations)";
+      sel.appendChild(empty);
+      sel.disabled = true;
+      return;
+    }
+    sel.disabled = false;
+    for (var i = 0; i < anims.length; i++) {
+      var opt = document.createElement("option");
+      opt.value = anims[i].name;
+      opt.textContent = anims[i].name;
+      sel.appendChild(opt);
+    }
+    if (selectedName && skeletonData.findAnimation(selectedName)) sel.value = selectedName;
+    else sel.selectedIndex = 0;
+  }
+
+  function switchAnimationByName(animName) {
+    if (!skeleton || !animName || forceSetupPoseOnly) return;
+    if (!skeleton.data.findAnimation(animName)) return;
+    if (!animationState) {
+      var asd = new spine.AnimationStateData(skeleton.data);
+      animationState = new spine.AnimationState(asd);
+      setupPoseOnly = false;
+    }
+    animationState.setAnimation(0, animName, true);
+    animationState.update(0);
+    animationState.apply(skeleton);
+    skeleton.updateWorldTransform();
+    bounds = boundsFromCurrentPose(skeleton);
+    lastFrameTime = Date.now() / 1000;
+    frameIdx = 0;
+    var ds = countDrawableSlots(skeleton);
+    diagLine = diagnoseDrawable(skeleton);
+    setStatus(
+      "Playing: " +
+        animName +
+        " (drawable slots: " +
+        ds +
+        "). " +
+        diagLine,
+      ds === 0
+    );
+  }
+
+  function mount() {
+    stopLoop();
+    resetSkinSelect();
+    setStatus("Loading…", false);
+    setAnimSelectPlaceholder("Loading…");
+
+    var base = document.getElementById("base").value.trim();
+    var atlasName = document.getElementById("atlas").value.trim();
+    var skelName = document.getElementById("skel").value.trim();
+
+    if (!atlasName || !skelName) {
+      setAnimSelectPlaceholder("Click Load to list animations…");
+      setStatus("Atlas and skeleton names are required.", true);
+      return;
+    }
+
+    viewPanX = 0;
+    viewPanY = 0;
+    viewPanDrag = null;
+
+    var atlasPath = joinUrl(base, atlasName);
+    var skelPath = joinUrl(base, skelName);
+
+    canvas = document.getElementById("spine-canvas");
+    disposeBgGlObjects();
+    /* preserveDrawingBuffer: so readPixels / toDataURL see content (tools & some GPUs). */
+    var config = { alpha: false, preserveDrawingBuffer: true, antialias: true };
+    gl = canvas.getContext("webgl", config) || canvas.getContext("experimental-webgl", config);
+    if (!gl) {
+      setStatus("WebGL unavailable.", true);
+      return;
+    }
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
+
+    /*
+     * Single-tint shader + batcher: two-color + dark slots from 3.3 exports can produce
+     * all-transparent fragments on some GPUs; colored-textured matches more game atlases.
+     */
+    shader = spine.webgl.Shader.newColoredTextured(gl);
+    batcher = new spine.webgl.PolygonBatcher(gl, false);
+    mvp = new spine.webgl.Matrix4();
+    skeletonRenderer = new spine.webgl.SkeletonRenderer(gl, false);
+    if (disableClipping) {
+      skeletonRenderer.clipper = {
+        clipAttachment: null,
+        clippedVertices: [],
+        clippedTriangles: [],
+        isClipping: function () {
+          return false;
+        },
+        clipStart: function () {},
+        clipEndWithSlot: function () {},
+        clipEnd: function () {},
+        clipTriangles: function () {}
+      };
+    } else {
+      skeletonRenderer.clipper = new spine.SkeletonClipping();
+    }
+    debugShader = spine.webgl.Shader.newColored(gl);
+    shapeRenderer = new spine.webgl.ShapeRenderer(gl);
+    skeletonDebugRenderer = new spine.webgl.SkeletonDebugRenderer(gl);
+    skeletonDebugRenderer.drawRegionAttachments = true;
+    skeletonDebugRenderer.drawBoundingBoxes = false;
+    skeletonDebugRenderer.drawMeshHull = true;
+    skeletonDebugRenderer.drawClipping = false;
+    assetManager = new spine.webgl.AssetManager(gl);
+
+    assetManager.loadTextureAtlas(atlasPath);
+    assetManager.loadBinary(skelPath);
+
+    waitAssets(function () {
+      var atlas = assetManager.get(atlasPath);
+      if (!atlas) {
+        setAnimSelectPlaceholder("Load failed");
+        setStatus("Missing atlas asset at key: " + atlasPath, true);
+        return;
+      }
+      var atlasLoader =
+        typeof spineFlexAtlas !== "undefined" && spineFlexAtlas.createFlexAtlasAttachmentLoader
+          ? spineFlexAtlas.createFlexAtlasAttachmentLoader(atlas)
+          : new spine.AtlasAttachmentLoader(atlas);
+      var skelBytes = assetManager.get(skelPath);
+      if (!skelBytes || !(skelBytes.byteLength > 0)) {
+        setAnimSelectPlaceholder("Load failed");
+        setStatus("Skeleton data empty or missing at key: " + skelPath, true);
+        return;
+      }
+
+      var skeletonData;
+      var peekVer =
+        typeof spineLegacyBinary !== "undefined" && spineLegacyBinary.peekVersion
+          ? spineLegacyBinary.peekVersion(skelBytes)
+          : "";
+      if (typeof spineLegacyBinary !== "undefined" && spineLegacyBinary.shouldUseLegacy(peekVer)) {
+        skeletonData = spineLegacyBinary.readSkeletonData(atlasLoader, skelBytes);
+      } else {
+        var skeletonBinary = new spine.SkeletonBinary(atlasLoader);
+        skeletonBinary.scale = 1;
+        skeletonData = skeletonBinary.readSkeletonData(skelBytes);
+      }
+
+      skeleton = new spine.Skeleton(skeletonData);
+      skeleton.color.set(1, 1, 1, 1);
+      fillSkinSelect(skeleton.data);
+      var displaySkin = pickDisplaySkin(skeleton.data, getActiveSkinName());
+      if (displaySkin != null) {
+        skeleton.setSkin(displaySkin);
+        skeleton.setSlotsToSetupPose();
+        attachOrphanSkinAttachments(skeleton, displaySkin);
+      }
+      var pickedSkinName = getActiveSkinName();
+      var skinSrcHint =
+        pickedSkinName !== ""
+          ? " (single skin: " + pickedSkinName + ")"
+          : skeleton.data.skins && skeleton.data.skins.length > 1
+            ? " (merged " + skeleton.data.skins.length + " skins)"
+            : "";
+
+      setupPoseOnly = false;
+      frameIdx = 0;
+      diagLine = "";
+      animationState = null;
+
+      var nAnim = skeleton.data.animations.length;
+      var ver = skeleton.data.version || "";
+      var bones = skeleton.data.bones.length;
+
+      var animName = animQuery;
+      if (animName && !skeleton.data.findAnimation(animName)) {
+        if (nAnim > 0) {
+          var fallback = skeleton.data.animations[0].name;
+          setStatus(
+            'Animation "' +
+              animName +
+              '" not found; using "' +
+              fallback +
+              '". (' +
+              nAnim +
+              " in skeleton, ver: " +
+              (ver || "?") +
+              ")",
+            false
+          );
+          animName = fallback;
+        } else {
+          fillAnimationSelect(skeleton.data, "");
+          setStatus(
+            'Animation "' + animName + '" not found; skeleton has no animations (ver: ' + (ver || "?") + ").",
+            true
+          );
+          skeleton.setToSetupPose();
+          if (skeleton.skin) attachOrphanSkinAttachments(skeleton, skeleton.skin);
+          skeleton.updateWorldTransform();
+          bounds = boundsFromCurrentPose(skeleton);
+          lastFrameTime = Date.now() / 1000;
+          setupPoseOnly = true;
+          beginRenderLoop();
+          return;
+        }
+      } else if (!animName && nAnim > 0) {
+        animName = skeleton.data.animations[0].name;
+      }
+
+      fillAnimationSelect(skeleton.data, animName || "");
+
+      if (forceSetupPoseOnly) {
+        setupPoseOnly = true;
+        animationState = null;
+        skeleton.setToSetupPose();
+        if (skeleton.skin) attachOrphanSkinAttachments(skeleton, skeleton.skin);
+        skeleton.updateWorldTransform();
+        bounds = boundsFromCurrentPose(skeleton);
+        lastFrameTime = Date.now() / 1000;
+        var dSlots2 = countDrawableSlots(skeleton);
+        var sSkin2 = skeleton.skin != null ? skeleton.skin.name : "none";
+        var sEnt2 = countSkinEntries(skeleton.skin);
+        diagLine = diagnoseDrawable(skeleton);
+        setStatus(
+          "Setup pose only (?setup=1, ignores animation): bones: " +
+            bones +
+            ", skin: " +
+            sSkin2 +
+            skinSrcHint +
+            ", attachments: " +
+            sEnt2 +
+            ", drawable: " +
+            dSlots2 +
+            ". " +
+            diagLine,
+          dSlots2 === 0
+        );
+        beginRenderLoop();
+        return;
+      }
+
+      if (!animName) {
+        setupPoseOnly = true;
+        skeleton.setToSetupPose();
+        if (skeleton.skin) attachOrphanSkinAttachments(skeleton, skeleton.skin);
+        skeleton.updateWorldTransform();
+        bounds = boundsFromCurrentPose(skeleton);
+        lastFrameTime = Date.now() / 1000;
+        var dSlots = countDrawableSlots(skeleton);
+        var sSkin = skeleton.skin != null ? skeleton.skin.name : "none";
+        var sEnt = countSkinEntries(skeleton.skin);
+        diagLine = diagnoseDrawable(skeleton);
+        setStatus(
+          "Setup pose only: " +
+            nAnim +
+            " anim(s), bones: " +
+            bones +
+            ", skin: " +
+            sSkin +
+            skinSrcHint +
+            ", skin attachments: " +
+            sEnt +
+            ", drawable: " +
+            dSlots +
+            " (ver: " +
+            (ver || "?") +
+            "). " +
+            diagLine,
+          dSlots === 0
+        );
+        beginRenderLoop();
+        return;
+      }
+
+      var animationStateData = new spine.AnimationStateData(skeleton.data);
+      animationState = new spine.AnimationState(animationStateData);
+      animationState.setAnimation(0, animName, true);
+      animationState.update(0);
+      animationState.apply(skeleton);
+      skeleton.updateWorldTransform();
+      bounds = boundsFromCurrentPose(skeleton);
+
+      lastFrameTime = Date.now() / 1000;
+      var drawSlots = countDrawableSlots(skeleton);
+      var skinName = skeleton.skin != null ? skeleton.skin.name : "none";
+      var skinEntries = countSkinEntries(skeleton.skin);
+      var bmsg =
+        "Playing: " +
+        animName +
+        " (bones: " +
+        bones +
+        ", anims: " +
+        nAnim +
+        ", display skin: " +
+        skinName +
+        ", attachments: " +
+        skinEntries +
+        ", drawable slots: " +
+        drawSlots +
+        ")" +
+        skinSrcHint;
+      if (drawSlots === 0) {
+        if (skinEntries === 0) {
+          bmsg +=
+            " — no attachments in chosen skin (atlas lookup failed for every region/mesh; see console).";
+        } else {
+          bmsg +=
+            " — skin has " +
+            skinEntries +
+            " attachment(s) but none are region/mesh (bounding boxes only?), or slots cleared by animation.";
+        }
+      }
+      diagLine = diagnoseDrawable(skeleton);
+      setStatus(bmsg + " " + diagLine, drawSlots === 0);
+      beginRenderLoop();
+    });
+  }
+
+  document.getElementById("opt-pma").checked = premultipliedAlpha;
+  document.getElementById("opt-pma").addEventListener("change", function () {
+    premultipliedAlpha = this.checked;
+  });
+
+  document.getElementById("btn-scan").addEventListener("click", function () {
+    scanExportedFolders();
+  });
+
+  document.getElementById("bg-image").addEventListener("change", loadBackgroundFromSelection);
+
+  function onBundleSearchInput() {
+    if (!bundleFolderList.length) return;
+    rebuildBundleSelect();
+  }
+  document.getElementById("bundle-search").addEventListener("input", onBundleSearchInput);
+  document.getElementById("bundle-search").addEventListener("search", onBundleSearchInput);
+
+  document.getElementById("bundle-select").addEventListener("change", function () {
+    if (!this.value) {
+      resetAtlasSkelSelectsPlaceholder();
+      return;
+    }
+    applyBundleFolder(this.value);
+    detectAtlasSkelForCurrentBase().catch(function () {});
+  });
+
+  document.getElementById("atlas-select").addEventListener("change", function () {
+    document.getElementById("atlas").value = this.value;
+    selectSkelMatchingAtlasStem();
+  });
+
+  document.getElementById("skel-select").addEventListener("change", function () {
+    document.getElementById("skel").value = this.value;
+    selectAtlasMatchingSkelStem();
+  });
+
+  document.getElementById("atlas").addEventListener("input", trySyncAdvancedAtlasSkelToSelects);
+  document.getElementById("skel").addEventListener("input", trySyncAdvancedAtlasSkelToSelects);
+
+  document.getElementById("load").addEventListener("click", reloadSpineFromUi);
+
+  document.getElementById("anim-select").addEventListener("change", function () {
+    var v = this.value;
+    if (!v) return;
+    switchAnimationByName(v);
+  });
+
+  document.getElementById("skin-select").addEventListener("change", applyDisplaySkinFromUi);
+
+  function isFullscreenActive() {
+    var pc = document.getElementById("player-container");
+    return !!(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.msFullscreenElement ||
+      (pc && pc.classList.contains("fs-mobile-fallback"))
+    );
+  }
+
+  function setViewZoomPercent(zPct) {
+    var zEl = document.getElementById("view-zoom");
+    if (!zEl) return;
+    var zMin = parseInt(zEl.min, 10) || 25;
+    var zMax = parseInt(zEl.max, 10) || 400;
+    var z = Math.max(zMin, Math.min(zMax, Math.round(zPct)));
+    zEl.value = String(z);
+    var ro = document.getElementById("view-zoom-readout");
+    if (ro) ro.textContent = z + "%";
+  }
+
+  function enterFsMobileFallback() {
+    var pc = document.getElementById("player-container");
+    if (!pc || pc.classList.contains("fs-mobile-fallback")) return;
+    fsFallbackScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.body.classList.add("fs-mobile-scroll-lock");
+    document.body.style.top = -fsFallbackScrollY + "px";
+    pc.classList.add("fs-mobile-fallback");
+    onFullscreenChanged();
+  }
+
+  function exitFsMobileFallback() {
+    var pc = document.getElementById("player-container");
+    if (!pc) return;
+    pc.classList.remove("fs-mobile-fallback");
+    document.body.classList.remove("fs-mobile-scroll-lock");
+    document.body.style.top = "";
+    window.scrollTo(0, fsFallbackScrollY);
+    viewTouchPointers.clear();
+    viewPointerState = null;
+    viewPanDrag = null;
+  }
+
+  function exitPlayerFullscreen() {
+    var pc = document.getElementById("player-container");
+    if (pc && pc.classList.contains("fs-mobile-fallback")) {
+      exitFsMobileFallback();
+      onFullscreenChanged();
+      return;
+    }
+    var ex = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+    if (ex) {
+      try {
+        ex.call(document);
+      } catch (err) {}
+    }
+  }
+
+  function preferFsTouchControls() {
+    if (typeof navigator !== "undefined" && (navigator.maxTouchPoints || 0) > 0) return true;
+    try {
+      return window.matchMedia("(pointer: coarse)").matches;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function hideFsMobileControls() {
+    var bar = document.getElementById("fs-mobile-controls");
+    var pc = document.getElementById("player-container");
+    if (fsMobileControlsHideTimer) {
+      clearTimeout(fsMobileControlsHideTimer);
+      fsMobileControlsHideTimer = null;
+    }
+    if (bar) bar.hidden = true;
+    if (pc) pc.classList.remove("fs-mc-bar-open");
+  }
+
+  function scheduleFsMobileControlsHide() {
+    if (fsMobileControlsHideTimer) clearTimeout(fsMobileControlsHideTimer);
+    fsMobileControlsHideTimer = setTimeout(function () {
+      fsMobileControlsHideTimer = null;
+      hideFsMobileControls();
+    }, FS_MOBILE_CONTROLS_AUTO_HIDE_MS);
+  }
+
+  function showFsMobileControls() {
+    if (!isFullscreenActive() || !preferFsTouchControls()) return;
+    var bar = document.getElementById("fs-mobile-controls");
+    var pc = document.getElementById("player-container");
+    if (!bar || !pc) return;
+    bar.hidden = false;
+    pc.classList.add("fs-mc-bar-open");
+    scheduleFsMobileControlsHide();
+  }
+
+  function syncFsTouchChrome() {
+    var pc = document.getElementById("player-container");
+    if (!pc) return;
+    var on = isFullscreenActive() && preferFsTouchControls();
+    pc.classList.toggle("fs-show-touch-chrome", on);
+    if (!on) hideFsMobileControls();
+  }
+
+  /** Cycle a select to another option with a non-empty value; delta is ±1 step in that list. Returns new value or null. */
+  function cycleSelectWithValues(sel, delta) {
+    if (!sel || sel.disabled) return null;
+    var indices = [];
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value) indices.push(i);
+    }
+    if (indices.length < 2) return null;
+    var cur = sel.selectedIndex;
+    var pos = -1;
+    for (var j = 0; j < indices.length; j++) {
+      if (indices[j] === cur) {
+        pos = j;
+        break;
+      }
+    }
+    if (pos < 0) pos = 0;
+    var len = indices.length;
+    var newPos = (pos + delta) % len;
+    if (newPos < 0) newPos += len;
+    sel.selectedIndex = indices[newPos];
+    return sel.value;
+  }
+
+  /** Delta is percentage points (e.g. ±10), same scale as the zoom slider. */
+  function adjustViewZoom(delta) {
+    var zEl = document.getElementById("view-zoom");
+    if (!zEl) return;
+    var cur = parseInt(zEl.value, 10) || 100;
+    setViewZoomPercent(cur + delta);
+  }
+
+  function isTypingTarget(el) {
+    if (!el || !el.tagName) return false;
+    var tag = el.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON") return true;
+    if (el.isContentEditable) return true;
+    return false;
+  }
+
+  function reloadSpineFromUi() {
+    mountPrepare()
+      .then(function () {
+        mount();
+      })
+      .catch(function () {
+        mount();
+      });
+  }
+
+  function fsMcCycleSpineFolder(delta) {
+    var bundleSel = document.getElementById("bundle-select");
+    var bv = cycleSelectWithValues(bundleSel, delta);
+    if (bv == null || !bv) return;
+    bundleSel.dispatchEvent(new Event("change", { bubbles: true }));
+    reloadSpineFromUi();
+  }
+
+  function fsMcCycleBackground(delta) {
+    var bgSel = document.getElementById("bg-image");
+    if (!bgSel || bgSel.disabled) return;
+    var nBg = bgSel.options.length;
+    if (nBg < 2) return;
+    var iBg = (bgSel.selectedIndex + delta + nBg) % nBg;
+    bgSel.selectedIndex = iBg;
+    bgSel.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function fsMcCycleAtlas(delta) {
+    var atlasSel = document.getElementById("atlas-select");
+    var v = cycleSelectWithValues(atlasSel, delta);
+    if (v == null) return;
+    atlasSel.dispatchEvent(new Event("change", { bubbles: true }));
+    reloadSpineFromUi();
+  }
+
+  function fsMcCycleAnimation(delta) {
+    var animSel = document.getElementById("anim-select");
+    var av = cycleSelectWithValues(animSel, delta);
+    if (av == null || !av) return;
+    animSel.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function fsMcApplyAction(action) {
+    switch (action) {
+      case "spine-prev":
+        fsMcCycleSpineFolder(-1);
+        break;
+      case "spine-next":
+        fsMcCycleSpineFolder(1);
+        break;
+      case "bg-prev":
+        fsMcCycleBackground(-1);
+        break;
+      case "bg-next":
+        fsMcCycleBackground(1);
+        break;
+      case "atlas-prev":
+        fsMcCycleAtlas(-1);
+        break;
+      case "atlas-next":
+        fsMcCycleAtlas(1);
+        break;
+      case "anim-prev":
+        fsMcCycleAnimation(-1);
+        break;
+      case "anim-next":
+        fsMcCycleAnimation(1);
+        break;
+      case "zoom-in":
+        adjustViewZoom(10);
+        break;
+      case "zoom-out":
+        adjustViewZoom(-10);
+        break;
+      default:
+        break;
+    }
+  }
+
+  document.addEventListener(
+    "keydown",
+    function (ev) {
+      if (!isFullscreenActive()) return;
+      if (isTypingTarget(ev.target)) return;
+      var key = ev.key;
+      if (key === "+" || key === "=" || key === "NumpadAdd" || key === "-" || key === "NumpadSubtract") {
+        var zoomIn = key === "+" || key === "=" || key === "NumpadAdd";
+        var zMult = ev.ctrlKey ? 2 : 1;
+        ev.preventDefault();
+        ev.stopPropagation();
+        adjustViewZoom((zoomIn ? 10 : -10) * zMult);
+        return;
+      }
+      var k1 = key.length === 1 ? key.toLowerCase() : key;
+      if (k1 === "w" || k1 === "s") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        fsMcCycleSpineFolder(k1 === "w" ? -1 : 1);
+        return;
+      }
+      if (k1 === "a" || k1 === "d") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        fsMcCycleBackground(k1 === "d" ? 1 : -1);
+        return;
+      }
+      if (key === "ArrowUp" || key === "ArrowDown") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        fsMcCycleAtlas(key === "ArrowUp" ? -1 : 1);
+        return;
+      }
+      if (key === "ArrowLeft" || key === "ArrowRight") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        fsMcCycleAnimation(key === "ArrowLeft" ? -1 : 1);
+      }
+    },
+    true
+  );
+
+  function updateFullscreenButtonLabel() {
+    var btn = document.getElementById("btn-fullscreen");
+    if (!btn) return;
+    btn.textContent = isFullscreenActive() ? "Exit full screen" : "Full screen";
+  }
+
+  document.getElementById("btn-fullscreen").addEventListener("click", function () {
+    var pc = document.getElementById("player-container");
+    if (isFullscreenActive()) {
+      exitPlayerFullscreen();
+      return;
+    }
+    var req = pc.requestFullscreen || pc.webkitRequestFullscreen || pc.msRequestFullscreen;
+    if (req) {
+      req.call(pc).catch(function () {
+        enterFsMobileFallback();
+      });
+    } else {
+      enterFsMobileFallback();
+    }
+  });
+
+  function updateFullscreenViewCursor() {
+    var pc = document.getElementById("player-container");
+    if (!pc) return;
+    if (!isFullscreenActive()) {
+      pc.style.cursor = "";
+      return;
+    }
+    pc.style.cursor = viewPanDrag ? "grabbing" : "grab";
+  }
+
+  function onFullscreenChanged() {
+    updateFullscreenButtonLabel();
+    updateFullscreenViewCursor();
+    if (!isFullscreenActive()) {
+      viewPanDrag = null;
+      viewTouchPointers.clear();
+      viewPointerState = null;
+    }
+    syncFsTouchChrome();
+  }
+
+  document.addEventListener("fullscreenchange", onFullscreenChanged);
+  document.addEventListener("webkitfullscreenchange", onFullscreenChanged);
+
+  (function setupFullscreenViewControls() {
+    var playerEl = document.getElementById("player-container");
+    if (!playerEl) return;
+
+    function viewPointerDistance(a, b) {
+      var dx = a.x - b.x;
+      var dy = a.y - b.y;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function viewFirstTwoPointerPositions() {
+      var arr = [];
+      viewTouchPointers.forEach(function (v) {
+        arr.push(v);
+      });
+      return arr.length >= 2 ? [arr[0], arr[1]] : null;
+    }
+
+    playerEl.addEventListener(
+      "wheel",
+      function (ev) {
+        if (!isFullscreenActive()) return;
+        if (isTypingTarget(ev.target)) return;
+        if (!document.getElementById("view-zoom")) return;
+        ev.preventDefault();
+        var step = ev.deltaY > 0 ? -10 : 10;
+        if (ev.ctrlKey) step *= 2;
+        adjustViewZoom(step);
+      },
+      { passive: false }
+    );
+
+    playerEl.addEventListener(
+      "pointerdown",
+      function (ev) {
+        if (!isFullscreenActive()) return;
+        if (!playerEl.contains(ev.target)) return;
+        if (ev.target.closest && ev.target.closest(".fs-edge-zone")) return;
+        if (ev.target.closest && ev.target.closest("#fs-mobile-controls")) return;
+        if (isTypingTarget(ev.target)) return;
+        if (ev.pointerType === "mouse" && ev.button !== 0) return;
+
+        viewTouchPointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+
+        if (viewTouchPointers.size === 1) {
+          viewPointerState = { mode: "pan", pointerId: ev.pointerId };
+          viewPanDrag = { lastX: ev.clientX, lastY: ev.clientY };
+          updateFullscreenViewCursor();
+        } else if (viewTouchPointers.size === 2) {
+          var pair = viewFirstTwoPointerPositions();
+          if (pair) {
+            var d0 = viewPointerDistance(pair[0], pair[1]);
+            viewPointerState = {
+              mode: "pinch",
+              startDist: Math.max(32, d0),
+              startZoom: parseInt(document.getElementById("view-zoom").value, 10) || 100,
+            };
+            viewPanDrag = null;
+          }
+        }
+
+        try {
+          playerEl.setPointerCapture(ev.pointerId);
+        } catch (err) {}
+        ev.preventDefault();
+      },
+      { passive: false }
+    );
+
+    function onViewPointerMove(ev) {
+      if (!isFullscreenActive() || !canvas) return;
+      if (!viewTouchPointers.has(ev.pointerId)) return;
+      viewTouchPointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+
+      var bw = canvas.width;
+      var bh = canvas.height;
+      if (bw < 1 || bh < 1) return;
+
+      if (viewPointerState && viewPointerState.mode === "pinch" && viewTouchPointers.size >= 2) {
+        var pr = viewFirstTwoPointerPositions();
+        if (pr && viewPointerState.startDist > 1) {
+          var d = viewPointerDistance(pr[0], pr[1]);
+          setViewZoomPercent(viewPointerState.startZoom * (d / viewPointerState.startDist));
+        }
+        return;
+      }
+
+      if (
+        viewPointerState &&
+        viewPointerState.mode === "pan" &&
+        viewTouchPointers.size === 1 &&
+        viewPanDrag &&
+        ev.pointerId === viewPointerState.pointerId
+      ) {
+        var dx = ev.clientX - viewPanDrag.lastX;
+        var dy = ev.clientY - viewPanDrag.lastY;
+        viewPanDrag.lastX = ev.clientX;
+        viewPanDrag.lastY = ev.clientY;
+        viewPanX -= (dx * lastOrthoWorldW) / bw;
+        viewPanY += (dy * lastOrthoWorldH) / bh;
+      }
+    }
+
+    function onViewPointerUp(ev) {
+      if (!viewTouchPointers.has(ev.pointerId)) return;
+      try {
+        playerEl.releasePointerCapture(ev.pointerId);
+      } catch (err) {}
+      viewTouchPointers.delete(ev.pointerId);
+
+      if (viewTouchPointers.size === 0) {
+        viewPointerState = null;
+        viewPanDrag = null;
+        updateFullscreenViewCursor();
+        return;
+      }
+
+      if (viewTouchPointers.size === 1) {
+        var remId = viewTouchPointers.keys().next().value;
+        var rem = viewTouchPointers.get(remId);
+        viewPointerState = { mode: "pan", pointerId: remId };
+        viewPanDrag = rem ? { lastX: rem.x, lastY: rem.y } : null;
+        updateFullscreenViewCursor();
+      }
+    }
+
+    playerEl.addEventListener("pointermove", onViewPointerMove);
+    playerEl.addEventListener("pointerup", onViewPointerUp);
+    playerEl.addEventListener("pointercancel", onViewPointerUp);
+
+    function onFsEdgePointerDown(ev) {
+      if (!isFullscreenActive() || !preferFsTouchControls()) return;
+      showFsMobileControls();
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+
+    var fsEdgeTop = document.getElementById("fs-edge-top");
+    var fsEdgeBottom = document.getElementById("fs-edge-bottom");
+    if (fsEdgeTop) fsEdgeTop.addEventListener("pointerdown", onFsEdgePointerDown, true);
+    if (fsEdgeBottom) fsEdgeBottom.addEventListener("pointerdown", onFsEdgePointerDown, true);
+
+    var fsMcBar = document.getElementById("fs-mobile-controls");
+    if (fsMcBar) {
+      fsMcBar.addEventListener("click", function (ev) {
+        var btn = ev.target.closest("[data-fs-action]");
+        if (btn) {
+          fsMcApplyAction(btn.getAttribute("data-fs-action"));
+          scheduleFsMobileControlsHide();
+        }
+      });
+      fsMcBar.addEventListener("pointerdown", function () {
+        scheduleFsMobileControlsHide();
+      });
+    }
+
+    var fsMcHideBtn = document.getElementById("fs-mc-btn-hide");
+    if (fsMcHideBtn) {
+      fsMcHideBtn.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        hideFsMobileControls();
+      });
+    }
+
+    var fsMcExitBtn = document.getElementById("fs-mc-btn-exit");
+    if (fsMcExitBtn) {
+      fsMcExitBtn.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        hideFsMobileControls();
+        exitPlayerFullscreen();
+      });
+    }
+  })();
+
+  document.getElementById("view-zoom").addEventListener("input", function () {
+    document.getElementById("view-zoom-readout").textContent = this.value + "%";
+  });
+  document.getElementById("view-zoom-readout").textContent =
+    document.getElementById("view-zoom").value + "%";
+
+  tryLoadSpineFoldersManifest().then(function (ok) {
+    if (!ok) scanExportedFolders();
+  });
+})();
+  </script>
+</body>
+</html>
